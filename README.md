@@ -1,6 +1,6 @@
 ## Performance Monitor for Wallpaper Engine Web Wallpapers
 
-**Performance Monitor** is a lightweight application designed specifically for Wallpaper Engine web wallpapers. It collects system performance data and serves it locally so that your web wallpapers can access real-time metrics. When installed, it runs as a Windows service, operating in the background and automatically starting when the system boots.
+**Performance Monitor** is a lightweight application designed specifically for [Wallpaper Engine web wallpapers](https://docs.wallpaperengine.io/en/web/overview.html). It collects system performance data and serves it locally so that your web wallpapers can access real-time metrics. When installed, it runs as a Windows service, operating in the background and automatically starting when the system boots.
 
 ### Features
 
@@ -28,7 +28,7 @@ Only the wallpapers that I am aware of are listed here.
 
 ### Installation & Usage
 
-1. Download the latest `PerformanceMonitor.exe` from the [Releases](https://github.com/sheetau/PerformanceMonitor/releases) page.
+1. Download the latest `PerformanceMonitor.exe` from [Latest Release](https://github.com/sheetau/PerformanceMonitor/releases/latest).
 2. Run the executable **once with administrator privileges**.
    - This sets up the service so it runs in the background automatically after every system restart.
 3. By default, performance data is accessible at: http://127.0.0.1:5000/performance
@@ -73,6 +73,7 @@ sc delete PerformanceMonitor
 - [pywin32](https://github.com/mhammond/pywin32)
 - [PyInstaller](https://github.com/pyinstaller/pyinstaller)
 - [Windows Services](https://docs.microsoft.com/en-us/windows/win32/services/services)
+- [Wallpaper Engine](https://www.wallpaperengine.io/en)
 
 ### Contributing
 
