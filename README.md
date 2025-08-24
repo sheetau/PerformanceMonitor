@@ -1,6 +1,6 @@
 ## Performance Monitor for Wallpaper Engine Web Wallpapers
 
-**Performance Monitor** is a lightweight application designed specifically for Wallpaper Engine web wallpapers. It collects system performance data and serves it locally so that your web wallpapers can access real-time metrics.
+**Performance Monitor** is a lightweight application designed specifically for Wallpaper Engine web wallpapers. It collects system performance data and serves it locally so that your web wallpapers can access real-time metrics. When installed, it runs as a Windows service, operating in the background and automatically starting when the system boots.
 
 ### Features
 
@@ -10,9 +10,21 @@
   - RAM and VRAM usage (VRAM metrics for NVIDIA GPUs only)
   - Disk usage and temperature
   - Network upload and download speeds
-    > Note: Temperature readings (CPU, GPU, Disk) are only provided if your hardware supports it **and** your wallpaper is designed to utilize them.
+
+> Note: Temperature readings (CPU, GPU, Disk) are only provided if your hardware supports it **and** your wallpaper is designed to utilize them.
+
 - Uses the following Python libraries to gather data: `GPUtil` for GPU-related metrics and `psutil` for others.
 - Runs a local Flask server to make performance data accessible to Wallpaper Engine web wallpapers.
+
+![Screenshot](screenshot.jpg?raw=true)
+
+### Supported Wallpapers
+
+- [[sheeta](https://github.com/sheetau)] [UI toggle wallpaper](https://steamcommunity.com/sharedfiles/filedetails/?id=3115349801)
+- [[sheeta](https://github.com/sheetau)] [Widget Wallpaper](https://steamcommunity.com/sharedfiles/filedetails/?id=3470738721)
+- [[sheeta](https://github.com/sheetau)] [weather + performance monitor widget](https://steamcommunity.com/sharedfiles/filedetails/?id=3343374776)
+
+Only the wallpapers that I am aware of are listed here.
 
 ### Installation & Usage
 
@@ -29,11 +41,10 @@
 
 ### Changing the Port
 
-1. Download `config.json` from:  
-   [https://github.com/sheetau/PerformanceMonitor/blob/main/config.json](https://github.com/sheetau/PerformanceMonitor/blob/main/config.json)
+1. Download [config.json](https://github.com/sheetau/PerformanceMonitor/blob/main/config.json).
 2. Place it in the same folder as `PerformanceMonitor.exe`.
 3. Modify the port number inside `config.json`.
-4. Refresh the service by right-clicking **Performance Monitor Service** in `services.msc` and selecting **Restart**.
+4. Restart the service by right-clicking **Performance Monitor Service** in `services.msc` and selecting **Restart**.
 
 ### Uninstalling
 
@@ -51,6 +62,25 @@ sc delete PerformanceMonitor
 - Performance statistics are collected locally and served only on `localhost`.
 - The default endpoint (`http://127.0.0.1:5000/performance`) is only accessible from your own computer.
 - Fully open-source, allowing you to inspect and verify the code at any time.
+
+### Dependencies and References
+
+- [Python 3.11+](https://www.python.org/)
+- [Flask](https://github.com/pallets/flask)
+- [Flask-CORS](https://github.com/corydolphin/flask-cors)
+- [psutil](https://github.com/giampaolo/psutil)
+- [GPUtil](https://github.com/anderskm/gputil)
+- [pywin32](https://github.com/mhammond/pywin32)
+- [PyInstaller](https://github.com/pyinstaller/pyinstaller)
+- [Windows Services](https://docs.microsoft.com/en-us/windows/win32/services/services)
+
+### Contributing
+
+- Create wallpapers compatible with this monitor by referring to the [next section](#accessing-performance-data-in-your-web-wallpaper).
+- If you like my work, please consider:
+  - Starring this project on GitHub
+  - [![ko-fi](https://www.ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/sheeta)
+- Stay tuned in [Sheeta's Discord Server](https://discord.gg/2dXs5HwXuW)
 
 ---
 
@@ -74,8 +104,6 @@ The Performance Monitor exposes system metrics via a local Flask server (default
 | `c_disk`, `d_disk`, …               | Disk usage in format "used GB/total GB" | GB            |
 | `nvme_0_temp`, `disk_1_temp`, …     | Drive temperatures (if available)       | °C            |
 | `timestamp`                         | UNIX timestamp of measurement           | seconds       |
-
----
 
 #### Example Usage
 
