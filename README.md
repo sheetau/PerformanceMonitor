@@ -20,9 +20,9 @@
 
 ### Supported Wallpapers
 
-- [[sheeta](https://github.com/sheetau)] [UI toggle wallpaper](https://steamcommunity.com/sharedfiles/filedetails/?id=3115349801)
-- [[sheeta](https://github.com/sheetau)] [Widget Wallpaper](https://steamcommunity.com/sharedfiles/filedetails/?id=3470738721)
-- [[sheeta](https://github.com/sheetau)] [weather + performance monitor widget](https://steamcommunity.com/sharedfiles/filedetails/?id=3343374776)
+- [[sheeta](https://steamcommunity.com/profiles/76561198383102380/)] [UI toggle wallpaper](https://steamcommunity.com/sharedfiles/filedetails/?id=3115349801)
+- [[sheeta](https://steamcommunity.com/profiles/76561198383102380/)] [Widget Wallpaper](https://steamcommunity.com/sharedfiles/filedetails/?id=3470738721)
+- [[sheeta](https://steamcommunity.com/profiles/76561198383102380/)] [weather + performance monitor widget](https://steamcommunity.com/sharedfiles/filedetails/?id=3343374776)
 
 Only the wallpapers that I am aware of are listed here.
 
