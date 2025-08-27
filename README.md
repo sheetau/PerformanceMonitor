@@ -78,6 +78,7 @@ sc delete PerformanceMonitor
 ### Contributing
 
 - Create wallpapers compatible with this monitor by referring to the [next section](#accessing-performance-data-in-your-web-wallpaper).
+- Report bugs [here](https://github.com/sheetau/PerformanceMonitor/issues) or in [my server](https://discord.gg/2dXs5HwXuW), including the console output or the contents of the log file, which is usually located at `C:\ProgramData\PerformanceMonitor\performance_monitor.log`.
 - If you like my work, please consider:
   - Starring this project on GitHub
   - [![ko-fi](https://www.ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/sheeta)

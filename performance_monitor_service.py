@@ -23,27 +23,31 @@ from flask import Flask, jsonify
 from flask_cors import CORS
 import psutil
 
-# Optional GPUtil import
+# Optionally import GPUtil
 try:
     import GPUtil
     GPU_AVAILABLE = True
 except ImportError:
     GPU_AVAILABLE = False
 
-# Logging setup
-LOG_DIR = Path(os.path.expandvars(r'%PROGRAMDATA%\\PerformanceMonitor'))
+# Logging configuration
+LOG_DIR = Path(os.path.expandvars(r'%PROGRAMDATA%\PerformanceMonitor'))
 LOG_DIR.mkdir(exist_ok=True)
 LOG_FILE = LOG_DIR / 'performance_monitor.log'
 
+logger = logging.getLogger('PerformanceMonitor')
+logger.setLevel(logging.INFO)
+
+# console log and log file handler (INFO and above)
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
         logging.FileHandler(LOG_FILE, encoding='utf-8'),
-        logging.StreamHandler(sys.stdout)
+        logging.StreamHandler()
     ]
 )
-logger = logging.getLogger('PerformanceMonitor')
+
 
 class PerformanceMonitorService(win32serviceutil.ServiceFramework):
     _svc_name_ = "PerformanceMonitor"
@@ -61,7 +65,7 @@ class PerformanceMonitorService(win32serviceutil.ServiceFramework):
         self.data_file = LOG_DIR / 'performance.json'
         self.port = self.load_port_config()
         
-        logger.info(f"Performance Monitor Service initialized (Port: {self.port})")
+        logger.warning(f"Performance Monitor Service initialized (Port: {self.port})")
     
     def load_port_config(self):
         """Load port configuration"""
@@ -77,10 +81,9 @@ class PerformanceMonitorService(win32serviceutil.ServiceFramework):
                 with open(config_file, 'r', encoding='utf-8') as f:
                     config = json.load(f)
                     port = config.get('port', 5000)
-                    logger.info(f"Port configuration loaded from {config_file}: {port}")
+                    logger.warning(f"Port configuration loaded from {config_file}: {port}")
                     return port
             else:
-                logger.info(f"No config file found at {config_file}, using default port 5000")
                 return 5000
         except Exception as e:
             logger.warning(f"Error loading port config: {e}, using default port 5000")
@@ -91,10 +94,11 @@ class PerformanceMonitorService(win32serviceutil.ServiceFramework):
         self.ReportServiceStatus(win32service.SERVICE_STOP_PENDING)
         win32event.SetEvent(self.hWaitStop)
         self.running = False
-
+        
         if self.flask_thread and self.flask_thread.is_alive():
             logger.info("Stopping Flask application...")
-
+            # Note: Graceful shutdown of Flask is complex; relies on process exit
+        
         logger.info("Service stopped")
 
     def SvcDoRun(self):
@@ -118,7 +122,7 @@ class PerformanceMonitorService(win32serviceutil.ServiceFramework):
             )
 
     def create_flask_app(self):
-        """Create Flask app"""
+        """Create Flask application"""
         app = Flask(__name__)
         CORS(app, origins="*")
         
@@ -133,7 +137,6 @@ class PerformanceMonitorService(win32serviceutil.ServiceFramework):
                         data = json.load(f)
                 else:
                     data = self.get_default_data()
-                
                 return jsonify(data)
             except Exception as e:
                 logger.error(f"Error serving performance data: {e}")
@@ -141,6 +144,7 @@ class PerformanceMonitorService(win32serviceutil.ServiceFramework):
         
         @app.route('/status', methods=['GET'])
         def get_status():
+            """Return service status"""
             return jsonify({
                 'status': 'running',
                 'service': self._svc_display_name_,
@@ -152,7 +156,7 @@ class PerformanceMonitorService(win32serviceutil.ServiceFramework):
         return app
 
     def get_default_data(self):
-        """Default performance data"""
+        """Return default performance data"""
         return {
             'cpu': 0,
             'memory': 0,
@@ -166,7 +170,7 @@ class PerformanceMonitorService(win32serviceutil.ServiceFramework):
     def get_performance_data(self):
         """Collect performance data"""
         try:
-            gpu_usage, vram_usage, gpu_temp = 0, 0, None
+            gpu_usage, vram_usage = 0, 0
             if GPU_AVAILABLE:
                 try:
                     gpus = GPUtil.getGPUs()
@@ -174,7 +178,6 @@ class PerformanceMonitorService(win32serviceutil.ServiceFramework):
                         gpu = gpus[0]
                         gpu_usage = round(gpu.load * 100, 1)
                         vram_usage = round(gpu.memoryUsed / gpu.memoryTotal * 100, 1)
-                        gpu_temp = gpu.temperature
                 except Exception as e:
                     logger.debug(f"GPU data unavailable: {e}")
 
@@ -190,31 +193,11 @@ class PerformanceMonitorService(win32serviceutil.ServiceFramework):
                 'memory': round(psutil.virtual_memory().percent, 1),
                 'gpu_usage': gpu_usage,
                 'vram_usage': vram_usage,
-                'gpu_temp': gpu_temp,
                 'upload_speed': upload_speed,
                 'download_speed': download_speed,
                 'timestamp': time.time()
             }
 
-            # CPU and drive temperatures
-            try:
-                temps = psutil.sensors_temperatures()
-                if 'coretemp' in temps:
-                    cpu_temps = temps['coretemp']
-                    for t in cpu_temps:
-                        if 'Package' in t.label or 'Tctl' in t.label:
-                            data['cpu_temp'] = t.current
-                    for i, t in enumerate(cpu_temps):
-                        if t.label.startswith('Core'):
-                            data[f'cpu_core{i}_temp'] = t.current
-                for name, entries in temps.items():
-                    if 'nvme' in name or 'disk' in name:
-                        for i, t in enumerate(entries):
-                            data[f'{name}_{i}_temp'] = t.current
-            except Exception as e:
-                logger.debug(f"Temperature data unavailable: {e}")
-
-            # Disk usage
             try:
                 for disk in psutil.disk_partitions():
                     if 'cdrom' in disk.opts or disk.fstype == '':
@@ -225,10 +208,10 @@ class PerformanceMonitorService(win32serviceutil.ServiceFramework):
                         data[f'{drive_letter}_disk'] = f"{usage.used / (1024**3):.1f} GB/{usage.total / (1024**3):.1f} GB"
                     except PermissionError:
                         continue
-                    except Exception as e:
-                        logger.debug(f"Disk {disk.device} error: {e}")
-            except Exception as e:
-                logger.debug(f"Error getting disk info: {e}")
+                    except Exception:
+                        continue
+            except Exception:
+                pass
 
             return data
             
@@ -237,7 +220,7 @@ class PerformanceMonitorService(win32serviceutil.ServiceFramework):
             return self.get_default_data()
 
     def update_performance_loop(self):
-        """Performance update loop"""
+        """Loop to update performance data"""
         logger.info("Performance monitoring started")
         
         while self.running:
@@ -245,11 +228,14 @@ class PerformanceMonitorService(win32serviceutil.ServiceFramework):
                 data = self.get_performance_data()
                 with open(self.data_file, 'w', encoding='utf-8') as f:
                     json.dump(data, f, ensure_ascii=False, indent=2)
+                
                 self.performance_data = data
                 logger.debug(f"Performance data updated: CPU={data['cpu']}%, Memory={data['memory']}%")
+                
             except Exception as e:
                 logger.error(f"Error updating performance data: {e}")
                 logger.error(traceback.format_exc())
+            
             time.sleep(1)
         
         logger.info("Performance monitoring stopped")
@@ -270,23 +256,27 @@ class PerformanceMonitorService(win32serviceutil.ServiceFramework):
             logger.error(traceback.format_exc())
 
     def main(self):
-        """Main loop"""
+        """Main processing"""
         try:
             self.app = self.create_flask_app()
             self.monitor_thread = threading.Thread(target=self.update_performance_loop, daemon=True)
             self.monitor_thread.start()
             logger.info("Performance monitoring thread started")
+            
             self.flask_thread = threading.Thread(target=self.run_flask, daemon=True)
             self.flask_thread.start()
             logger.info("Flask server thread started")
+            
             logger.info("Performance Monitor Service is running")
             win32event.WaitForSingleObject(self.hWaitStop, win32event.INFINITE)
+            
         except Exception as e:
             logger.error(f"Main thread error: {e}")
             logger.error(traceback.format_exc())
 
+
 def check_admin_rights():
-    """Check if running with admin rights"""
+    """Check for admin rights"""
     try:
         return ctypes.windll.shell32.IsUserAnAdmin()
     except:
@@ -298,7 +288,6 @@ def request_admin_rights():
     if check_admin_rights():
         return True
     
-    # Re-run as administrator
     try:
         ctypes.windll.shell32.ShellExecuteW(
             None, 
@@ -314,40 +303,50 @@ def request_admin_rights():
     
     return False
 
-
 def install_service():
-    """Install the service"""
+    """Install the Windows service"""
     try:
         logger.info("Installing Performance Monitor Service...")
-        
-        # Get current executable path
-        if getattr(sys, 'frozen', False):
-            # If packaged with PyInstaller
-            exe_path = sys.executable
-        else:
-            # Normal Python execution
-            exe_path = os.path.abspath(__file__)
-        
+        exe_path = sys.executable if getattr(sys, 'frozen', False) else os.path.abspath(__file__)
         logger.info(f"Service executable path: {exe_path}")
         
-        # Remove existing service (if exists)
+        svc_name = PerformanceMonitorService._svc_name_
+
         try:
-            win32serviceutil.RemoveService(PerformanceMonitorService._svc_name_)
-            logger.info("Existing service removed")
-            time.sleep(2)  # Wait for removal to complete
+            logger.info("Attempting to stop existing service...")
+            win32serviceutil.StopService(svc_name)
+            logger.info("Existing service stopped.")
         except Exception as e:
-            logger.debug(f"No existing service to remove: {e}")
-        
-        # Open service manager
+            logger.debug(f"Service was not running or stop failed: {e}")
+
+        try:
+            logger.info("Attempting to remove existing service...")
+            win32serviceutil.RemoveService(svc_name)
+            logger.info("Existing service marked for deletion.")
+
+            timeout = 30
+            start_time = time.time()
+            while time.time() - start_time < timeout:
+                try:
+                    win32serviceutil.QueryServiceStatus(svc_name)
+                    logger.debug("Service still exists. Waiting...")
+                    time.sleep(1)
+                except Exception:
+                    logger.info("Existing service removed successfully.")
+                    break
+            else:
+                logger.error("Timeout waiting for service deletion to complete.")
+                return False
+
+        except Exception as e:
+            logger.debug(f"No existing service to remove or removal failed: {e}")
+
         hscm = win32service.OpenSCManager(None, None, win32service.SC_MANAGER_ALL_ACCESS)
         try:
-            # Service execution command (with debug argument)
             service_cmd = f'"{exe_path}" debug'
-            
-            # Create service
             hs = win32service.CreateService(
                 hscm,
-                PerformanceMonitorService._svc_name_,
+                svc_name,
                 PerformanceMonitorService._svc_display_name_,
                 win32service.SERVICE_ALL_ACCESS,
                 win32service.SERVICE_WIN32_OWN_PROCESS,
@@ -360,8 +359,7 @@ def install_service():
                 None,
                 None
             )
-            
-            # Set service description
+
             try:
                 win32service.ChangeServiceConfig2(
                     hs,
@@ -374,10 +372,10 @@ def install_service():
             win32service.CloseServiceHandle(hs)
             logger.info("Service installed successfully")
             return True
-            
+
         finally:
             win32service.CloseServiceHandle(hscm)
-            
+
     except Exception as e:
         logger.error(f"Service installation failed: {e}")
         logger.error(traceback.format_exc())
@@ -388,14 +386,10 @@ def start_service():
     """Start the service"""
     try:
         logger.info("Starting Performance Monitor Service...")
-        
-        # Open service manager
         hscm = win32service.OpenSCManager(None, None, win32service.SC_MANAGER_ALL_ACCESS)
         try:
-            # Open service
             hs = win32service.OpenService(hscm, PerformanceMonitorService._svc_name_, win32service.SERVICE_ALL_ACCESS)
             try:
-                # Start service
                 win32service.StartService(hs, None)
                 logger.info("Service started successfully")
                 return True
@@ -410,55 +404,64 @@ def start_service():
         return False
 
 
+def get_service_port():
+    try:
+        if getattr(sys, 'frozen', False):
+            config_dir = Path(sys.executable).parent
+        else:
+            config_dir = Path(__file__).parent
+
+        config_file = config_dir / 'config.json'
+        if config_file.exists():
+            with open(config_file, 'r', encoding='utf-8') as f:
+                return json.load(f).get('port', 5000)
+        else:
+            return 5000
+    except Exception as e:
+        logger.warning(f"Error loading port config: {e}, using default port 5000")
+        return 5000
+
+
 def main():
     """Main function"""
-    # Create log directory
     LOG_DIR.mkdir(exist_ok=True)
     
-    # Check if running with PyInstaller package
     if getattr(sys, 'frozen', False):
-        # Special handling when running as exe
         if len(sys.argv) == 1:
-            # No arguments → run in installer mode
-            logger.info("Running in service control mode")
-            
-            # Installer mode
             print("Performance Monitor Service Installer")
             print("====================================")
             
             if not check_admin_rights():
-                print("Administrator privileges are required. Re-running as administrator...")
+                print("Admin rights are required. Restarting as admin...")
                 if not request_admin_rights():
-                    input("Failed to obtain administrator rights. Press Enter to exit...")
+                    input("Failed to obtain admin rights. Press Enter to exit...")
                     return
                 else:
-                    return  # Relaunched as administrator
+                    return
             
-            print("Running with administrator rights...")
+            print("Running with admin rights...")
             
-            # Install and start service
             if install_service():
                 print("Service installation completed.")
-                time.sleep(3)  # Wait for installation to complete
+                time.sleep(3)
                 if start_service():
-                    port = PerformanceMonitorService(['dummy']).port  # Get port setting
+                    port = get_service_port()
                     print("Service started successfully.")
                     print(f"Log file: {LOG_FILE}")
                     print(f"Performance data: http://127.0.0.1:{port}/performance")
                     print(f"Service status: http://127.0.0.1:{port}/status")
                 else:
-                    print("Failed to start service. Please check the logs.")
+                    print(f"Failed to start the service. Check logs at {LOG_FILE}")
             else:
-                print("Failed to install service. Please check the logs.")
+                print(f"Failed to install the service. Check logs at {LOG_FILE}")
             
             input("\nPress Enter to exit...")
             return
         else:
-            # If arguments are provided
             arg = sys.argv[1].lower()
             
             if not check_admin_rights():
-                print("Administrator privileges are required.")
+                print("Admin rights are required.")
                 input("Press Enter to exit...")
                 return
                 
@@ -484,7 +487,7 @@ def main():
                     win32serviceutil.StopService(PerformanceMonitorService._svc_name_)
                     time.sleep(2)
                 except:
-                    pass  # Already stopped
+                    pass
                 try:
                     win32serviceutil.RemoveService(PerformanceMonitorService._svc_name_)
                     print("Service removed.")
@@ -492,31 +495,25 @@ def main():
                     print(f"Service removal error: {e}")
                 return
             elif arg in ['debug', '--debug']:
-                # Debug mode - run as service
                 logger.info("Running in debug mode")
                 servicemanager.Initialize()
                 servicemanager.PrepareToHostSingle(PerformanceMonitorService)
                 servicemanager.StartServiceCtrlDispatcher()
                 return
             else:
-                # Delegate to win32serviceutil
                 try:
                     win32serviceutil.HandleCommandLine(PerformanceMonitorService)
                 except SystemExit:
-                    pass  # Normal exit
+                    pass
                 return
     else:
-        # Development mode (direct Python execution)
         if len(sys.argv) > 1:
-            # Handle service-related CLI args
             win32serviceutil.HandleCommandLine(PerformanceMonitorService)
         else:
-            # Direct execution mode (testing)
             print("Development mode - running service directly")
             service = PerformanceMonitorService([''])
             service.main()
     
-    # Run as Windows Service (when started by Service Manager)
     logger.info("Starting as Windows Service")
     servicemanager.Initialize()
     servicemanager.PrepareToHostSingle(PerformanceMonitorService)
