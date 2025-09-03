@@ -35,7 +35,7 @@ try:
 
     def get_gpu_vram():
         # Choose the GPU with the highest total VRAM, and return that GPU's memory usage (same idea as above)
-        return (u/t for (u,t) in max(((x.memoryUsed, x.memoryTotal) for x in GPUtil.getGPUs()), key=lambda x: x.memoryTotal) if t>0).next())
+        return (u/t for (u,t) in max(((x.memoryUsed, x.memoryTotal) for x in GPUtil.getGPUs()), key=lambda x: x.memoryTotal) if t>0).next()
 
 except ImportError:
     from subprocess import run, CalledProcessError
