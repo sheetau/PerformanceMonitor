@@ -32,11 +32,11 @@ try:
 
     def get_gpu_util():
         # Choose the GPU with the highest utilization (for multi-GPU systems, typically the primary GPU unless at very low load/weird usecases, which are less important)
-        return max(map(x.load for x in GPUtil.getGPUs()))
+        return max(x.load for x in GPUtil.getGPUs())
 
     def get_gpu_vram():
         # Choose the GPU with the highest total VRAM, and return that GPU's memory usage (same idea as above)
-        return (u/t for (u,t) in max(((x.memoryUsed, x.memoryTotal) for x in GPUtil.getGPUs()), key=lambda x: x[1]) if t>0).next()
+        return next((u/t for (u,t) in max(((x.memoryUsed, x.memoryTotal) for x in GPUtil.getGPUs()), key=lambda x: x[1]) if t>0), 0)
 
 except ImportError:
     if os.name == "nt":
