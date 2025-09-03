@@ -28,16 +28,31 @@ import psutil
 try:
     import GPUtil
 
-    device = GPUtil.getGPUs()[0]
 
     def get_gpu_util():
-        return device.load
+        # Choose the GPU with the highest utilization (for multi-GPU systems, typically the primary GPU unless at very low load/weird usecases, which are less important)
+        return max(map(x.load for x in GPUtil.getGPUs()))
 
     def get_gpu_vram():
-        return device.memoryUsed / device.memoryTotal
+        # Choose the GPU with the highest total VRAM, and return that GPU's memory usage (same idea as above)
+        return (u/t for (u,t) in max(((x.memoryUsed, x.memoryTotal) for x in GPUtil.getGPUs()), key=lambda x: x.memoryTotal) if t>0).next())
 
 except ImportError:
-    from subprocess import run
+    from subprocess import run, CalledProcessError
+    try:
+        # Get adapter VRAM availability
+        # Same concept as above for multi-GPU systems
+        # Select highest VRAM GPU and use that
+        GPU_VRAM_AVAIL = run([
+            "powershell",
+            "-Command",
+            '(Get-WmiObject Win32_VideoController | Where-Object AdapterRam).AdapterRam | Measure-Object -Maximum | Select-Object -ExpandProperty Maximum'],
+                capture_output=True,
+                text=True,
+                check=True,
+        )
+    except CalledProcessError:
+        GPU_VRAM_AVAIL = 1 # Avoid division by zero
 
     def get_gpu_util():
         p = run(
@@ -68,7 +83,7 @@ except ImportError:
             check=False,
         )
         return (
-            float(p.stdout.rstrip().replace(",", ".") or "0")
+            float(p.stdout.rstrip().replace(",", ".") or "0") / GPU_VRAM_AVAIL
             if p.returncode == 0
             else 0
         )
