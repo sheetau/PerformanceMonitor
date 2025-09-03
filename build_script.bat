@@ -37,16 +37,7 @@ REM Upgrade pip
 python -m pip install --upgrade pip
 
 REM Install required packages
-set "packages=flask flask-cors psutil GPUtil pywin32 pyinstaller setuptools"
-
-for %%p in (%packages%) do (
-    echo Installing %%p...
-    python -m pip install %%p
-    if errorlevel 1 (
-        echo Failed to install %%p.
-        set "failed=1"
-    )
-)
+pip install -r requirements.txt
 
 if defined failed (
     echo.
