@@ -46,14 +46,14 @@ except ImportError:
             # Get adapter VRAM availability
             # Same concept as above for multi-GPU systems
             # Select highest VRAM GPU and use that
-            GPU_VRAM_AVAIL = run([
+            GPU_VRAM_AVAIL = int(run([
                 "powershell",
                 "-Command",
                 '(Get-WmiObject Win32_VideoController | Where-Object AdapterRam).AdapterRam | Measure-Object -Maximum | Select-Object -ExpandProperty Maximum'],
                     capture_output=True,
                     text=True,
                     check=True,
-            )
+            ).stdout or "0")
         except CalledProcessError:
             GPU_VRAM_AVAIL = 1 # Avoid division by zero
 
