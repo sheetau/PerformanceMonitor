@@ -24,10 +24,11 @@ from flask_cors import CORS
 import psutil
 
 # Optionally import GPUtil
+GPU_AVAILABLE = False
 # Try NVIDIA-specific methods
 try:
     import GPUtil
-
+    GPU_AVAILABLE = True
 
     def get_gpu_util():
         # Choose the GPU with the highest utilization (for multi-GPU systems, typically the primary GPU unless at very low load/weird usecases, which are less important)
@@ -38,55 +39,63 @@ try:
         return (u/t for (u,t) in max(((x.memoryUsed, x.memoryTotal) for x in GPUtil.getGPUs()), key=lambda x: x.memoryTotal) if t>0).next()
 
 except ImportError:
-    from subprocess import run, CalledProcessError
-    try:
-        # Get adapter VRAM availability
-        # Same concept as above for multi-GPU systems
-        # Select highest VRAM GPU and use that
-        GPU_VRAM_AVAIL = run([
-            "powershell",
-            "-Command",
-            '(Get-WmiObject Win32_VideoController | Where-Object AdapterRam).AdapterRam | Measure-Object -Maximum | Select-Object -ExpandProperty Maximum'],
+    if os.name == "nt":
+        GPU_AVAILABLE = True
+        from subprocess import run, CalledProcessError
+        try:
+            # Get adapter VRAM availability
+            # Same concept as above for multi-GPU systems
+            # Select highest VRAM GPU and use that
+            GPU_VRAM_AVAIL = run([
+                "powershell",
+                "-Command",
+                '(Get-WmiObject Win32_VideoController | Where-Object AdapterRam).AdapterRam | Measure-Object -Maximum | Select-Object -ExpandProperty Maximum'],
+                    capture_output=True,
+                    text=True,
+                    check=True,
+            )
+        except CalledProcessError:
+            GPU_VRAM_AVAIL = 1 # Avoid division by zero
+
+        def get_gpu_util():
+            p = run(
+                [
+                    "powershell",
+                    "-Command",
+                    '(((Get-Counter "\\GPU Engine(*)\\Utilization Percentage").CounterSamples | Where-Object CookedValue).CookedValue | Measure-Object -Sum | Select-Object -ExpandProperty Sum)',
+                ],
                 capture_output=True,
                 text=True,
-                check=True,
-        )
-    except CalledProcessError:
-        GPU_VRAM_AVAIL = 1 # Avoid division by zero
+                check=False,
+            )
+            return (
+                float(p.stdout.rstrip().replace(",", ".") or "0")
+                if p.returncode == 0
+                else 0
+            )
 
-    def get_gpu_util():
-        p = run(
-            [
-                "powershell",
-                "-Command",
-                '(((Get-Counter "\\GPU Engine(*)\\Utilization Percentage").CounterSamples | Where-Object CookedValue).CookedValue | Measure-Object -Sum | Select-Object -ExpandProperty Sum)',
-            ],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        return (
-            float(p.stdout.rstrip().replace(",", ".") or "0")
-            if p.returncode == 0
-            else 0
-        )
+        def get_gpu_vram():
+            p = run(
+                [
+                    "powershell",
+                    "-Command",
+                    '(((Get-Counter "\\GPU Adapter Memory(*)\\Dedicated Usage").CounterSamples | Where-Object CookedValue).CookedValue | Measure-Object -Sum | Select-Object -ExpandProperty Sum)',
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            return (
+                float(p.stdout.rstrip().replace(",", ".") or "0") / GPU_VRAM_AVAIL
+                if p.returncode == 0
+                else 0
+            )
+    else:
+        def get_gpu_util():
+            return 0
 
-    def get_gpu_vram():
-        p = run(
-            [
-                "powershell",
-                "-Command",
-                '(((Get-Counter "\\GPU Adapter Memory(*)\\Dedicated Usage").CounterSamples | Where-Object CookedValue).CookedValue | Measure-Object -Sum | Select-Object -ExpandProperty Sum)',
-            ],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        return (
-            float(p.stdout.rstrip().replace(",", ".") or "0") / GPU_VRAM_AVAIL
-            if p.returncode == 0
-            else 0
-        )
+        def get_gpu_vram():
+            return 0
 
 
 # Logging configuration
@@ -208,7 +217,7 @@ class PerformanceMonitorService(win32serviceutil.ServiceFramework):
                     "status": "running",
                     "service": self._svc_display_name_,
                     "port": self.port,
-                    "gpu_available": True,
+                    "gpu_available": GPU_AVAILABLE,
                     "timestamp": time.time(),
                 }
             )
