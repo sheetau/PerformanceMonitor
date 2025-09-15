@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 Performance Monitor Windows Service
+Enhanced with CPU and GPU temperature monitoring
 """
 
 import os
@@ -11,6 +12,7 @@ import time
 import threading
 import logging
 import traceback
+import subprocess
 from pathlib import Path
 import ctypes
 from ctypes import wintypes
@@ -89,6 +91,82 @@ class PerformanceMonitorService(win32serviceutil.ServiceFramework):
             logger.warning(f"Error loading port config: {e}, using default port 5000")
             return 5000
 
+    def get_cpu_temperature(self):
+        """Get CPU temperature using multiple methods"""
+        try:
+            # Method 1: Try psutil sensors (works on some systems)
+            if hasattr(psutil, "sensors_temperatures"):
+                temps = psutil.sensors_temperatures()
+                if temps:
+                    # Try different sensor names
+                    for sensor_name in ['coretemp', 'k10temp', 'acpi', 'thermal']:
+                        if sensor_name in temps:
+                            for entry in temps[sensor_name]:
+                                if entry.current and entry.current > 0:
+                                    return round(entry.current, 1)
+            
+            # Method 2: Try WMI through subprocess (Windows specific)
+            try:
+                result = subprocess.run([
+                    'powershell', '-Command',
+                    'Get-WmiObject -Namespace "root/OpenHardwareMonitor" -Class Sensor | Where-Object {$_.SensorType -eq "Temperature" -and $_.Name -like "*CPU*"} | Select-Object -First 1 -ExpandProperty Value'
+                ], capture_output=True, text=True, timeout=5, creationflags=subprocess.CREATE_NO_WINDOW)
+                
+                if result.returncode == 0 and result.stdout.strip():
+                    temp = float(result.stdout.strip())
+                    if temp > 0:
+                        return round(temp, 1)
+            except:
+                pass
+            
+            # Method 3: Try alternative WMI query
+            try:
+                result = subprocess.run([
+                    'powershell', '-Command',
+                    'Get-WmiObject -Class MSAcpi_ThermalZoneTemperature -Namespace "root/wmi" | Select-Object -First 1 -ExpandProperty CurrentTemperature'
+                ], capture_output=True, text=True, timeout=5, creationflags=subprocess.CREATE_NO_WINDOW)
+                
+                if result.returncode == 0 and result.stdout.strip():
+                    # Convert from tenths of Kelvin to Celsius
+                    temp_kelvin = float(result.stdout.strip()) / 10
+                    temp_celsius = temp_kelvin - 273.15
+                    if temp_celsius > 0 and temp_celsius < 150:  # Sanity check
+                        return round(temp_celsius, 1)
+            except:
+                pass
+            
+        except Exception as e:
+            logger.debug(f"CPU temperature unavailable: {e}")
+        
+        return None
+
+    def get_gpu_temperature(self):
+        """Get GPU temperature"""
+        try:
+            if GPU_AVAILABLE:
+                gpus = GPUtil.getGPUs()
+                if gpus and gpus[0].temperature is not None:
+                    return round(gpus[0].temperature, 1)
+            
+            # Alternative method using nvidia-ml-py or subprocess
+            try:
+                result = subprocess.run([
+                    'nvidia-smi', '--query-gpu=temperature.gpu', 
+                    '--format=csv,noheader,nounits'
+                ], capture_output=True, text=True, timeout=5, creationflags=subprocess.CREATE_NO_WINDOW)
+                
+                if result.returncode == 0 and result.stdout.strip():
+                    temp = float(result.stdout.strip())
+                    if temp > 0:
+                        return round(temp, 1)
+            except:
+                pass
+            
+        except Exception as e:
+            logger.debug(f"GPU temperature unavailable: {e}")
+        
+        return None
+
     def SvcStop(self):
         logger.info("Service stop requested")
         self.ReportServiceStatus(win32service.SERVICE_STOP_PENDING)
@@ -162,6 +240,8 @@ class PerformanceMonitorService(win32serviceutil.ServiceFramework):
             'memory': 0,
             'gpu_usage': 0,
             'vram_usage': 0,
+            'cpu_temp': None,
+            'gpu_temp': None,
             'upload_speed': 0,
             'download_speed': 0,
             'timestamp': time.time()
@@ -181,6 +261,10 @@ class PerformanceMonitorService(win32serviceutil.ServiceFramework):
                 except Exception as e:
                     logger.debug(f"GPU data unavailable: {e}")
 
+            # Get temperature data
+            cpu_temp = self.get_cpu_temperature()
+            gpu_temp = self.get_gpu_temperature()
+
             net_io_before = psutil.net_io_counters()
             time.sleep(1)
             net_io_after = psutil.net_io_counters()
@@ -193,6 +277,8 @@ class PerformanceMonitorService(win32serviceutil.ServiceFramework):
                 'memory': round(psutil.virtual_memory().percent, 1),
                 'gpu_usage': gpu_usage,
                 'vram_usage': vram_usage,
+                'cpu_temp': cpu_temp,
+                'gpu_temp': gpu_temp,
                 'upload_speed': upload_speed,
                 'download_speed': download_speed,
                 'timestamp': time.time()
@@ -230,7 +316,15 @@ class PerformanceMonitorService(win32serviceutil.ServiceFramework):
                     json.dump(data, f, ensure_ascii=False, indent=2)
                 
                 self.performance_data = data
-                logger.debug(f"Performance data updated: CPU={data['cpu']}%, Memory={data['memory']}%")
+                
+                # Log with temperature info
+                temp_info = ""
+                if data.get('cpu_temp'):
+                    temp_info += f", CPU Temp={data['cpu_temp']}°C"
+                if data.get('gpu_temp'):
+                    temp_info += f", GPU Temp={data['gpu_temp']}°C"
+                
+                logger.debug(f"Performance data updated: CPU={data['cpu']}%, Memory={data['memory']}%{temp_info}")
                 
             except Exception as e:
                 logger.error(f"Error updating performance data: {e}")
