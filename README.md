@@ -13,6 +13,8 @@
 
 > Note: Temperature readings (CPU, GPU, Disk) are only provided if your hardware supports it **and** your wallpaper is designed to utilize them.
 
+> If your CPU temperature is inaccurate or unavailable, running [OpenHardwareMonitor](https://openhardwaremonitor.org/downloads/) as a Windows service as described [here](https://github.com/openhardwaremonitor/openhardwaremonitor/issues/838#issuecomment-2370917648) may allow the program to access precise readings.
+
 - Uses the following Python libraries to gather data: `GPUtil` for GPU-related metrics and `psutil` for others.
 - Runs a local Flask server to make performance data accessible to Wallpaper Engine web wallpapers.
 
