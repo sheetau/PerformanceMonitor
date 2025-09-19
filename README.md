@@ -35,6 +35,8 @@ Only the wallpapers that I am aware of are listed here.
    - This sets up the service so it runs in the background automatically after every system restart.
 3. By default, performance data is accessible at: http://127.0.0.1:5000/performance
 
+> ⚠️ Since this app is not code-signed yet, Windows SmartScreen may show a warning when launching the installer, especially while the download count is still low. If you see the warning, click “More info” and then “Run anyway” to proceed with the installation. This is expected behavior and the warning will disappear over time as the app gains reputation.
+
 ### Stopping the Service
 
 1. Press `Win + R` and type `services.msc`.
