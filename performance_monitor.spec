@@ -6,7 +6,9 @@ a = Analysis(
     ['performance_monitor_service.py'],
     pathex=[],
     binaries=[],
-    datas=[],
+    datas=[
+        ('README_for_users.txt', '.'),
+    ],
     hiddenimports=[
         'win32service',
         'win32serviceutil', 
@@ -63,5 +65,5 @@ exe = EXE(
     entitlements_file=None,
     uac_admin=True,  # UAC request
     icon=None,
-    version_file=None,
+    version='version_info.txt',
 )

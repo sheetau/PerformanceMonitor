@@ -35,8 +35,6 @@ Only the wallpapers that I am aware of are listed here.
    - This sets up the service so it runs in the background automatically after every system restart.
 3. By default, performance data is accessible at: http://127.0.0.1:5000/performance
 
-> ⚠️ Since this app is not code-signed yet, Windows SmartScreen may show a warning when launching the installer, especially while the download count is still low. If you see the warning, click “More info” and then “Run anyway” to proceed with the installation. This is expected behavior and the warning will disappear over time as the app gains reputation.
-
 ### Stopping the Service
 
 1. Press `Win + R` and type `services.msc`.
@@ -52,12 +50,7 @@ Only the wallpapers that I am aware of are listed here.
 
 ### Uninstalling
 
-Run the following command in command prompt:
-
-```bat
-taskkill /f /im PerformanceMonitor.exe
-sc delete PerformanceMonitor
-```
+Run the included `uninstaller.bat` as Administrator (This will stop and delete Performance Monitor service, Kill any remaining `PerformanceMonitor.exe` processes, and Delete `PerformanceMonitor.exe` itself).
 
 ### Security & Privacy
 
@@ -66,6 +59,10 @@ sc delete PerformanceMonitor
 - Performance statistics are collected locally and served only on `localhost`.
 - The default endpoint (`http://127.0.0.1:5000/performance`) is only accessible from your own computer.
 - Fully open-source, allowing you to inspect and verify the code at any time.
+
+> Note on Security Warnings:
+> This executable is not code-signed, so some antivirus software may flag it as suspicious.
+> It is safe to run. If you are still concerned, you can review the source code in the GitHub repository or uninstall using `uninstaller.bat`. Please understand this is a personal, free project.
 
 ### Dependencies and References
 

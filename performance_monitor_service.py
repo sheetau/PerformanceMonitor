@@ -515,6 +515,79 @@ def get_service_port():
         logger.warning(f"Error loading port config: {e}, using default port 5000")
         return 5000
 
+def create_uninstall_bat():
+    """Create uninstall batch in the same folder as the exe"""
+    try:
+        exe_dir = os.path.dirname(sys.executable)
+        bat_path = os.path.join(exe_dir, "uninstaller.bat")
+        bat_content = f"""@echo off
+        :: Check for admin rights
+        >nul 2>&1 "%SYSTEMROOT%\\system32\\cacls.exe" "%SYSTEMROOT%\\system32\\config\\system"
+        if '%errorlevel%' NEQ '0' (
+            echo This script requires Administrator privileges. Please run as Administrator.
+            pause
+            exit /b
+        )
+
+        echo Stopping Performance Monitor service...
+        sc stop PerformanceMonitor || echo Failed to stop service. It may not be running.
+
+        timeout /t 2 /nobreak >nul
+
+        echo Deleting Performance Monitor service...
+        sc delete PerformanceMonitor || echo Failed to delete service. It may have been already removed.
+
+        echo Killing any remaining PerformanceMonitor.exe processes...
+        taskkill /f /im PerformanceMonitor.exe || echo No running process found.
+
+        echo Deleting PerformanceMonitor.exe...
+        del "{os.path.join(exe_dir, 'PerformanceMonitor.exe')}" || echo Could not delete exe. It may not exist or be open.
+
+        echo Deleting README_for_users.txt...
+        del "{os.path.join(exe_dir, 'README_for_users.txt')}" || echo README file not found or already deleted.
+
+        echo Uninstallation completed.
+
+        echo You can safely delete this uninstaller.bat file if you want.
+        pause
+        """
+        with open(bat_path, "w", encoding="utf-8") as f:
+            f.write(bat_content)
+        print(f"\nUninstall script created: {bat_path}")
+    except Exception as e:
+        print(f"\nFailed to create uninstall script: {e}")
+
+def extract_and_open_readme():
+    """Open README"""
+    try:
+        if getattr(sys, 'frozen', False):
+            bundle_dir = sys._MEIPASS
+            readme_bundled = os.path.join(bundle_dir, 'README_for_users.txt')
+            readme_target = os.path.join(os.path.dirname(sys.executable), 'README_for_users.txt')
+            
+            if os.path.exists(readme_bundled):
+                import shutil
+                shutil.copy2(readme_bundled, readme_target)
+                
+                os.startfile(readme_target)
+                print(f"\nREADME file extracted and opened: {readme_target}")
+                return True
+            else:
+                print(f"\nREADME file not found in bundle: {readme_bundled}")
+                return False
+        else:
+            readme_path = os.path.join(os.path.dirname(__file__), 'README_for_users.txt')
+            if os.path.exists(readme_path):
+                os.startfile(readme_path)
+                print(f"\nREADME file opened: {readme_path}")
+                return True
+            else:
+                print(f"\nREADME file not found: {readme_path}")
+                return False
+                
+    except Exception as e:
+        print(f"\nError handling README file: {e}")
+        return False
 
 def main():
     """Main function"""
@@ -544,6 +617,10 @@ def main():
                     print(f"Log file: {LOG_FILE}")
                     print(f"Performance data: http://127.0.0.1:{port}/performance")
                     print(f"Service status: http://127.0.0.1:{port}/status")
+                    
+                    create_uninstall_bat()
+                    extract_and_open_readme()
+                        
                 else:
                     print(f"Failed to start the service. Check logs at {LOG_FILE}")
             else:
