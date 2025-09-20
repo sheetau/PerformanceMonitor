@@ -11,6 +11,7 @@ Performance Monitor is a lightweight application designed specifically for Wallp
 
 Note on Security Warnings:
 This executable is not code-signed, so some antivirus software may flag it as suspicious.
+Additionally, because this tool runs as a standard Windows service using legitimate Service APIs, it operates in Session 0. This architecture is necessary for proper system integration and automatic startup, but it can unfortunately cause some user-level diagnostic tools (like Process Explorer or PowerShell's Get-Process) to fail in retrieving standard process metadata (e.g., Path, Company). This behavior is an inherent side effect of the service architecture, not a result of intentional anti-analysis or obfuscation techniques.**
 It is safe to run. If you are concerned, you can review the source code in the GitHub repository or uninstall using the steps below. Please understand this is a personal, free project.
 
 Stopping the Service:
