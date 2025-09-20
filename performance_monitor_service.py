@@ -569,7 +569,7 @@ def extract_and_open_readme():
                 import shutil
                 shutil.copy2(readme_bundled, readme_target)
                 
-                os.startfile(readme_target)
+                subprocess.Popen(['notepad.exe', readme_target], close_fds=True)
                 print(f"\nREADME file extracted and opened: {readme_target}")
                 return True
             else:
@@ -578,7 +578,7 @@ def extract_and_open_readme():
         else:
             readme_path = os.path.join(os.path.dirname(__file__), 'README_for_users.txt')
             if os.path.exists(readme_path):
-                os.startfile(readme_path)
+                subprocess.Popen(['notepad.exe', readme_path], close_fds=True)
                 print(f"\nREADME file opened: {readme_path}")
                 return True
             else:
