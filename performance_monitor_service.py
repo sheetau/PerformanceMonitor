@@ -2,7 +2,6 @@
 # -*- coding: utf-8 -*-
 """
 Performance Monitor Windows Service
-Enhanced with CPU and GPU temperature monitoring
 """
 
 import os
@@ -15,11 +14,12 @@ import traceback
 import subprocess
 from pathlib import Path
 import ctypes
-from ctypes import wintypes
 
 import win32service
 import win32serviceutil
 import win32event
+import win32security
+import winreg
 import servicemanager
 from flask import Flask, jsonify
 from flask_cors import CORS
@@ -65,31 +65,49 @@ class PerformanceMonitorService(win32serviceutil.ServiceFramework):
         self.running = False
         self.performance_data = {}
         self.data_file = LOG_DIR / 'performance.json'
-        self.port = self.load_port_config()
+        self.port, self.collect_config, self.hwinfo_allow_fallback = self.load_config()
+        self.last_net_io = psutil.net_io_counters()
+        self.last_net_time = time.time()
+        self.psutil_was_enabled = False
         
         logger.warning(f"Performance Monitor Service initialized (Port: {self.port})")
     
-    def load_port_config(self):
-        """Load port configuration"""
+    def load_config(self):
+        """Load configuration"""
         try:
             if getattr(sys, 'frozen', False):
                 config_dir = Path(sys.executable).parent
             else:
                 config_dir = Path(__file__).parent
-            
+
             config_file = config_dir / 'config.json'
-            
+
+            port = 5000
+            collect = {
+                "psutil": True,
+                "hwinfo": True
+            }
+            hwinfo_allow_fallback = False
+
             if config_file.exists():
                 with open(config_file, 'r', encoding='utf-8') as f:
                     config = json.load(f)
-                    port = config.get('port', 5000)
-                    logger.warning(f"Port configuration loaded from {config_file}: {port}")
-                    return port
-            else:
-                return 5000
+
+                port = config.get("port", port)
+
+                collect_cfg = config.get("collect", {})
+                collect["psutil"] = collect_cfg.get("psutil", True)
+                collect["hwinfo"] = collect_cfg.get("hwinfo", True)
+
+                hwinfo_allow_fallback = config.get("hwinfo_allow_user_hive_fallback", False)
+
+                logger.warning(f"Config loaded: port={port}, collect={collect}, hwinfo_fallback={hwinfo_allow_fallback}")
+
+            return port, collect, hwinfo_allow_fallback
+
         except Exception as e:
-            logger.warning(f"Error loading port config: {e}, using default port 5000")
-            return 5000
+            logger.warning(f"Error loading config: {e}")
+            return 5000, {"psutil": True, "hwinfo": True}, False
 
     def get_cpu_temperature(self):
         """Get CPU temperature using multiple methods"""
@@ -236,71 +254,218 @@ class PerformanceMonitorService(win32serviceutil.ServiceFramework):
     def get_default_data(self):
         """Return default performance data"""
         return {
-            'cpu': 0,
-            'memory': 0,
-            'gpu_usage': 0,
-            'vram_usage': 0,
-            'cpu_temp': None,
-            'gpu_temp': None,
-            'upload_speed': 0,
-            'download_speed': 0,
-            'timestamp': time.time()
+            "timestamp": time.time(),
+            "psutil": {
+                'cpu': 0,
+                'memory': 0,
+                'gpu_usage': 0,
+                'vram_usage': 0,
+                'cpu_temp': None,
+                'gpu_temp': None,
+                'upload_speed': 0,
+                'download_speed': 0
+            },
+            "hwinfo": {
+                "available": False,
+                "sensors": []
+            }
         }
+
+    def get_current_user_sid(self):
+        """Get currently logged in user's SID"""
+        try:
+            # Get interactive user token
+            import win32ts
+            
+            session_id = win32ts.WTSGetActiveConsoleSessionId()
+            if session_id == 0xFFFFFFFF:  # No active session
+                return None
+                
+            # Get user token for the session
+            token = win32ts.WTSQueryUserToken(session_id)
+            user_info = win32security.GetTokenInformation(token, win32security.TokenUser)
+            sid = win32security.ConvertSidToStringSid(user_info[0])
+            
+            return sid
+        except Exception as e:
+            logger.debug(f"Failed to get current user SID: {e}")
+            return None
+
+    def _read_hwinfo_key(self, root, path):
+        sensors = []
+        try:
+            with winreg.OpenKey(root, path) as key:
+                i = 0
+                while True:
+                    try:
+                        entry = {"id": i}
+
+                        for name in (
+                            "Sensor",
+                            "Label",
+                            "Value",
+                            "ValueRaw",
+                            "Color"
+                        ):
+                            try:
+                                entry[name.lower()] = winreg.QueryValueEx(
+                                    key, f"{name}{i}"
+                                )[0]
+                            except FileNotFoundError:
+                                entry[name.lower()] = None
+
+                        if entry["label"] is None:
+                            break
+
+                        sensors.append(entry)
+                        i += 1
+
+                    except FileNotFoundError:
+                        break
+        except FileNotFoundError:
+            pass
+        except Exception as e:
+            logger.debug(f"HWiNFO read error ({path}): {e}")
+
+        return sensors
+
+    def get_hwinfo_sensors(self):
+        """Get HWiNFO Gadget sensors"""
+        hwinfo_reg_path = r"SOFTWARE\HWiNFO64\VSB"
+
+        # 1. HKEY_LOCAL_MACHINE (default & most common for services)
+        sensors = self._read_hwinfo_key(
+            winreg.HKEY_LOCAL_MACHINE,
+            hwinfo_reg_path
+        )
+        if sensors:
+            return sensors
+
+        # 2. Optional fallback: HKEY_USERS\<SID>
+        if self.hwinfo_allow_fallback:
+            sid = self.get_current_user_sid()
+            if sid:
+                sensors = self._read_hwinfo_key(
+                    winreg.HKEY_USERS,
+                    fr"{sid}\{hwinfo_reg_path}"
+                )
+                if sensors:
+                    return sensors
+
+        return []
 
     def get_performance_data(self):
         """Collect performance data"""
         try:
-            gpu_usage, vram_usage = 0, 0
-            if GPU_AVAILABLE:
-                try:
-                    gpus = GPUtil.getGPUs()
-                    if gpus:
-                        gpu = gpus[0]
-                        gpu_usage = round(gpu.load * 100, 1)
-                        vram_usage = round(gpu.memoryUsed / gpu.memoryTotal * 100, 1)
-                except Exception as e:
-                    logger.debug(f"GPU data unavailable: {e}")
+            result = {"timestamp": time.time()}
+            is_psutil_enabled = self.collect_config.get("psutil", True)
 
-            # Get temperature data
-            cpu_temp = self.get_cpu_temperature()
-            gpu_temp = self.get_gpu_temperature()
+            # ===== psutil backend =====
+            if is_psutil_enabled:
+                # --- GPU (GPUtil) ---
+                gpu_usage, vram_usage = 0, 0
+                vram_used_gb, vram_total_gb = None, None
 
-            net_io_before = psutil.net_io_counters()
-            time.sleep(1)
-            net_io_after = psutil.net_io_counters()
-            
-            upload_speed = round((net_io_after.bytes_sent - net_io_before.bytes_sent) * 8 / 1000, 1)
-            download_speed = round((net_io_after.bytes_recv - net_io_before.bytes_recv) * 8 / 1000, 1)
-
-            data = {
-                'cpu': round(psutil.cpu_percent(), 1),
-                'memory': round(psutil.virtual_memory().percent, 1),
-                'gpu_usage': gpu_usage,
-                'vram_usage': vram_usage,
-                'cpu_temp': cpu_temp,
-                'gpu_temp': gpu_temp,
-                'upload_speed': upload_speed,
-                'download_speed': download_speed,
-                'timestamp': time.time()
-            }
-
-            try:
-                for disk in psutil.disk_partitions():
-                    if 'cdrom' in disk.opts or disk.fstype == '':
-                        continue
+                if GPU_AVAILABLE:
                     try:
-                        usage = psutil.disk_usage(disk.mountpoint)
-                        drive_letter = disk.device[0].lower()
-                        data[f'{drive_letter}_disk'] = f"{usage.used / (1024**3):.1f} GB/{usage.total / (1024**3):.1f} GB"
-                    except PermissionError:
-                        continue
-                    except Exception:
-                        continue
-            except Exception:
-                pass
+                        gpus = GPUtil.getGPUs()
+                        if gpus:
+                            gpu = gpus[0]
+                            gpu_usage = round(gpu.load * 100, 1)
+                            vram_usage = round(gpu.memoryUsed / gpu.memoryTotal * 100, 1)
+                            vram_used_gb = round(gpu.memoryUsed / 1024, 1)
+                            vram_total_gb = round(gpu.memoryTotal / 1024, 1)
+                    except Exception as e:
+                        logger.debug(f"GPU data unavailable: {e}")
 
-            return data
-            
+                # --- CPU / GPU temperature ---
+                cpu_temp = self.get_cpu_temperature()
+                gpu_temp = self.get_gpu_temperature()
+
+                # --- Memory ---
+                mem = psutil.virtual_memory()
+
+                # --- Network (upload/download speed in Kpbs) ---
+                net_io_now = psutil.net_io_counters()
+                time_now = time.time()
+
+                if not self.psutil_was_enabled:
+                    upload_speed = 0.0
+                    download_speed = 0.0
+                    self.psutil_was_enabled = True
+                else:
+                    elapsed = time_now - self.last_net_time
+                    if elapsed > 0:
+                        upload_speed = round(
+                            ((net_io_now.bytes_sent - self.last_net_io.bytes_sent) * 8 / 1000) / elapsed,
+                            1
+                        )
+                        download_speed = round(
+                            ((net_io_now.bytes_recv - self.last_net_io.bytes_recv) * 8 / 1000) / elapsed,
+                            1
+                        )
+
+                self.last_net_io = net_io_now
+                self.last_net_time = time_now
+
+                data = {
+                    # CPU
+                    'cpu': round(psutil.cpu_percent(), 1),
+                    'cpu_percore': psutil.cpu_percent(percpu=True),
+
+                    # Memory
+                    'memory': round(mem.percent, 1),
+                    'memory_gb': f"{mem.used / (1024**3):.1f} GB/{mem.total / (1024**3):.1f} GB",
+
+                    # GPU
+                    'gpu_usage': gpu_usage,
+                    'vram_usage': vram_usage,
+                    'vram_gb': (
+                        f"{vram_used_gb:.1f} GB/{vram_total_gb:.1f} GB"
+                        if vram_used_gb is not None else None
+                    ),
+
+                    # Temperature
+                    'cpu_temp': cpu_temp,
+                    'gpu_temp': gpu_temp,
+
+                    # Network
+                    'upload_speed': upload_speed,
+                    'download_speed': download_speed,
+
+                    'timestamp': time.time()
+                }
+
+                # --- Disk capacity per drive ---
+                try:
+                    for disk in psutil.disk_partitions():
+                        if 'cdrom' in disk.opts or disk.fstype == '':
+                            continue
+                        try:
+                            usage = psutil.disk_usage(disk.mountpoint)
+                            drive_letter = disk.device[0].lower()
+                            data[f'{drive_letter}_disk'] = (
+                                f"{usage.used / (1024**3):.1f} GB/"
+                                f"{usage.total / (1024**3):.1f} GB"
+                            )
+                        except PermissionError:
+                            continue
+                except Exception:
+                    pass
+
+                result["psutil"] = data
+            else:
+                self.psutil_was_enabled = False
+                result["psutil"] = None
+
+            # ===== hwinfo backend =====
+            if self.collect_config.get("hwinfo", True):
+                result["hwinfo"] = self.get_hwinfo_sensors()
+            else:
+                result["hwinfo"] = None
+
+            return result
+
         except Exception as e:
             logger.error(f"Error getting performance data: {e}")
             return self.get_default_data()
@@ -308,31 +473,46 @@ class PerformanceMonitorService(win32serviceutil.ServiceFramework):
     def update_performance_loop(self):
         """Loop to update performance data"""
         logger.info("Performance monitoring started")
-        
+
         while self.running:
             try:
                 data = self.get_performance_data()
+
                 with open(self.data_file, 'w', encoding='utf-8') as f:
                     json.dump(data, f, ensure_ascii=False, indent=2)
-                
+
                 self.performance_data = data
-                
-                # Log with temperature info
-                temp_info = ""
-                if data.get('cpu_temp'):
-                    temp_info += f", CPU Temp={data['cpu_temp']}°C"
-                if data.get('gpu_temp'):
-                    temp_info += f", GPU Temp={data['gpu_temp']}°C"
-                
-                logger.debug(f"Performance data updated: CPU={data['cpu']}%, Memory={data['memory']}%{temp_info}")
-                
+
+                #  logging (psutil aware)
+                log_parts = []
+
+                psutil_data = data.get("psutil")
+                if psutil_data:
+                    log_parts.append(f"CPU={psutil_data.get('cpu')}%")
+                    log_parts.append(f"Memory={psutil_data.get('memory')}%")
+
+                    if psutil_data.get("cpu_temp") is not None:
+                        log_parts.append(f"CPU Temp={psutil_data['cpu_temp']}°C")
+                    if psutil_data.get("gpu_temp") is not None:
+                        log_parts.append(f"GPU Temp={psutil_data['gpu_temp']}°C")
+
+                hwinfo_data = data.get("hwinfo")
+                if isinstance(hwinfo_data, list) and hwinfo_data:
+                    log_parts.append(f"HWiNFO={len(hwinfo_data)} sensors")
+
+                if log_parts:
+                    logger.debug("Performance data updated: " + ", ".join(log_parts))
+                else:
+                    logger.debug("Performance data updated (no active backends)")
+
             except Exception as e:
                 logger.error(f"Error updating performance data: {e}")
                 logger.error(traceback.format_exc())
-            
+
             time.sleep(1)
-        
+
         logger.info("Performance monitoring stopped")
+
 
     def run_flask(self):
         """Run Flask server"""
@@ -543,9 +723,6 @@ def create_uninstall_bat():
         echo Deleting PerformanceMonitor.exe...
         del "{os.path.join(exe_dir, 'PerformanceMonitor.exe')}" || echo Could not delete exe. It may not exist or be open.
 
-        echo Deleting README_for_users.txt...
-        del "{os.path.join(exe_dir, 'README_for_users.txt')}" || echo README file not found or already deleted.
-
         echo Uninstallation completed.
 
         echo You can safely delete this uninstaller.bat file if you want.
@@ -556,38 +733,6 @@ def create_uninstall_bat():
         print(f"\nUninstall script created: {bat_path}")
     except Exception as e:
         print(f"\nFailed to create uninstall script: {e}")
-
-def extract_and_open_readme():
-    """Open README"""
-    try:
-        if getattr(sys, 'frozen', False):
-            bundle_dir = sys._MEIPASS
-            readme_bundled = os.path.join(bundle_dir, 'README_for_users.txt')
-            readme_target = os.path.join(os.path.dirname(sys.executable), 'README_for_users.txt')
-            
-            if os.path.exists(readme_bundled):
-                import shutil
-                shutil.copy2(readme_bundled, readme_target)
-                
-                subprocess.Popen(['notepad.exe', readme_target], close_fds=True)
-                print(f"\nREADME file extracted and opened: {readme_target}")
-                return True
-            else:
-                print(f"\nREADME file not found in bundle: {readme_bundled}")
-                return False
-        else:
-            readme_path = os.path.join(os.path.dirname(__file__), 'README_for_users.txt')
-            if os.path.exists(readme_path):
-                subprocess.Popen(['notepad.exe', readme_path], close_fds=True)
-                print(f"\nREADME file opened: {readme_path}")
-                return True
-            else:
-                print(f"\nREADME file not found: {readme_path}")
-                return False
-                
-    except Exception as e:
-        print(f"\nError handling README file: {e}")
-        return False
 
 def main():
     """Main function"""
@@ -612,14 +757,19 @@ def main():
                 print("Service installation completed.")
                 time.sleep(3)
                 if start_service():
-                    port = get_service_port()
-                    print("Service started successfully.")
-                    print(f"Log file: {LOG_FILE}")
-                    print(f"Performance data: http://127.0.0.1:{port}/performance")
-                    print(f"Service status: http://127.0.0.1:{port}/status")
-                    
                     create_uninstall_bat()
-                    extract_and_open_readme()
+                    port = get_service_port()
+                    print("============================================================")
+                    print("Service started successfully.")
+                    print(f" > Log file: {LOG_FILE}")
+                    print(f" > Performance data: http://127.0.0.1:{port}/performance")
+                    print(f" > Service status: http://127.0.0.1:{port}/status")
+                    print("============================================================")
+                    print("\nFor more detailed usage instructions, please refer to the README:")
+                    print(" > https://github.com/sheetau/PerformanceMonitor/tree/main")
+                    print("\nYou can change the port number and data sources by placing a config.json file")
+                    print("in the same directory as the executable:")
+                    print(" > https://github.com/sheetau/PerformanceMonitor/blob/main/config.json")
                         
                 else:
                     print(f"Failed to start the service. Check logs at {LOG_FILE}")

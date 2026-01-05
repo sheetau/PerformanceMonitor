@@ -6,9 +6,6 @@ a = Analysis(
     ['performance_monitor_service.py'],
     pathex=[],
     binaries=[],
-    datas=[
-        ('README_for_users.txt', '.'),
-    ],
     hiddenimports=[
         'win32service',
         'win32serviceutil', 
@@ -25,12 +22,13 @@ a = Analysis(
         'pathlib',
         'ctypes',
         'traceback',
-        'pywintypes',
         'win32api',
         'win32con',
         'win32security',
         'win32process',
-        'win32file'
+        'win32file',
+        'winreg',
+        'win32security'
     ],
     hookspath=[],
     hooksconfig={},
