@@ -24,6 +24,7 @@
 
 ### Supported Wallpapers
 
+- [[sheeta](https://steamcommunity.com/profiles/76561198383102380/)] [TERMINAL 02](https://steamcommunity.com/sharedfiles/filedetails/?id=3639973107)
 - [[sheeta](https://steamcommunity.com/profiles/76561198383102380/)] [UI toggle wallpaper](https://steamcommunity.com/sharedfiles/filedetails/?id=3115349801)
 - [[sheeta](https://steamcommunity.com/profiles/76561198383102380/)] [Widget Wallpaper](https://steamcommunity.com/sharedfiles/filedetails/?id=3470738721)
 - [[sheeta](https://steamcommunity.com/profiles/76561198383102380/)] [weather + performance monitor widget](https://steamcommunity.com/sharedfiles/filedetails/?id=3343374776)
