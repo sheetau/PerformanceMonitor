@@ -52,7 +52,7 @@ Only the wallpapers that I am aware of are listed here.
   1. Install and launch **[HWiNFO](https://www.hwinfo.com/)**.
   2. In **Settings**, enable all options starting with **“Minimize …”** and **Auto Start**.
   3. Open **Sensor Settings → HWiNFO Gadget**.
-  4. Enable **“Report value in gadget”** for the sensors you want to use.
+  4. Enable **"Enable reporting to Gadget"**, and enable **“Report value in gadget”** for the sensors you want to use.
 
   Sensors marked this way can be accessed by supported wallpapers by referencing their sensor label names or ids.
 
@@ -235,8 +235,8 @@ async function fetchPerformance() {
       "RAM Usage": `${psutil.memory} %`,
       "GPU Usage": `${psutil.gpu_usage} %`,
       "GPU Temp": hwinfo["GPU Temperature"]?.value ?? `${psutil.gpu_temp} °C`,
-      "Download": `${psutil.download_speed} KB/s`,
-      "Upload": `${psutil.upload_speed} KB/s`,
+      Download: `${psutil.download_speed} KB/s`,
+      Upload: `${psutil.upload_speed} KB/s`,
     };
 
     // Add disk info (any key ending in _disk)
