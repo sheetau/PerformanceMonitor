@@ -102,9 +102,14 @@ Run the included `uninstaller.bat` as Administrator (This will stop and delete P
 - The default endpoint (`http://127.0.0.1:5000/performance`) is only accessible from your own computer.
 - Fully open-source, allowing you to inspect and verify the code at any time.
 
-> Note on Security Warnings:
+> **Note on Security Warnings:**
+>
 > This executable is not code-signed, so some antivirus software may flag it as suspicious.
+>
+> If the download is blocked, you can temporarily disable real-time protection or add the intended download path to your antivirus exclusion list.<br>If you see the warning, click “More info” and then “Run anyway” to proceed with the installation.
+>
 > Additionally, because this tool runs as a standard Windows service using legitimate Service APIs, it operates in Session 0. This architecture is necessary for proper system integration and automatic startup, but it can unfortunately cause some user-level diagnostic tools (like Process Explorer or PowerShell's Get-Process) to fail in retrieving standard process metadata (e.g., Path, Company). This behavior is an inherent side effect of the service architecture, not a result of intentional anti-analysis or obfuscation techniques.
+>
 > It is safe to run. If you are concerned, you can review the source code in the GitHub repository or uninstall using `uninstaller.bat`. Please understand this is a personal, free project.
 
 ### Dependencies and References
