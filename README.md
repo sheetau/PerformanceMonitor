@@ -106,7 +106,7 @@ Run the included `uninstaller.bat` as Administrator (This will stop and delete P
 >
 > This executable is not code-signed, so some antivirus software may flag it as suspicious.
 >
-> If the download is blocked, you can temporarily disable real-time protection or add the intended download path to your antivirus exclusion list.<br>If you see the warning, click “More info” and then “Run anyway” to proceed with the installation.
+> If the download is blocked, you can work around it by adding the intended download path to your antivirus exclusion list _(Windows Security → Virus & threat protection → Manage settings → Exclusions → Add an exclusion)_. If you see the warning, click “More info” and then “Run anyway” to proceed with the installation.
 >
 > Additionally, because this tool runs as a standard Windows service using legitimate Service APIs, it operates in Session 0. This architecture is necessary for proper system integration and automatic startup, but it can unfortunately cause some user-level diagnostic tools (like Process Explorer or PowerShell's Get-Process) to fail in retrieving standard process metadata (e.g., Path, Company). This behavior is an inherent side effect of the service architecture, not a result of intentional anti-analysis or obfuscation techniques.
 >
