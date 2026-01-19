@@ -18,7 +18,6 @@ import ctypes
 import win32service
 import win32serviceutil
 import win32event
-import win32security
 import winreg
 import servicemanager
 from flask import Flask, jsonify
@@ -65,7 +64,7 @@ class PerformanceMonitorService(win32serviceutil.ServiceFramework):
         self.running = False
         self.performance_data = {}
         self.data_file = LOG_DIR / 'performance.json'
-        self.port, self.collect_config, self.hwinfo_allow_fallback = self.load_config()
+        self.port, self.collect_config = self.load_config()
         self.last_net_io = psutil.net_io_counters()
         self.last_net_time = time.time()
         self.psutil_was_enabled = False
@@ -87,7 +86,6 @@ class PerformanceMonitorService(win32serviceutil.ServiceFramework):
                 "psutil": True,
                 "hwinfo": True
             }
-            hwinfo_allow_fallback = False
 
             if config_file.exists():
                 with open(config_file, 'r', encoding='utf-8') as f:
@@ -99,15 +97,12 @@ class PerformanceMonitorService(win32serviceutil.ServiceFramework):
                 collect["psutil"] = collect_cfg.get("psutil", True)
                 collect["hwinfo"] = collect_cfg.get("hwinfo", True)
 
-                hwinfo_allow_fallback = config.get("hwinfo_allow_user_hive_fallback", False)
+                logger.warning(f"Config loaded: port={port}, collect={collect}")
 
-                logger.warning(f"Config loaded: port={port}, collect={collect}, hwinfo_fallback={hwinfo_allow_fallback}")
-
-            return port, collect, hwinfo_allow_fallback
-
+            return port, collect
         except Exception as e:
             logger.warning(f"Error loading config: {e}")
-            return 5000, {"psutil": True, "hwinfo": True}, False
+            return 5000, {"psutil": True, "hwinfo": True}
 
     def get_cpu_temperature(self):
         """Get CPU temperature using multiple methods"""
@@ -271,26 +266,6 @@ class PerformanceMonitorService(win32serviceutil.ServiceFramework):
             }
         }
 
-    def get_current_user_sid(self):
-        """Get currently logged in user's SID"""
-        try:
-            # Get interactive user token
-            import win32ts
-            
-            session_id = win32ts.WTSGetActiveConsoleSessionId()
-            if session_id == 0xFFFFFFFF:  # No active session
-                return None
-                
-            # Get user token for the session
-            token = win32ts.WTSQueryUserToken(session_id)
-            user_info = win32security.GetTokenInformation(token, win32security.TokenUser)
-            sid = win32security.ConvertSidToStringSid(user_info[0])
-            
-            return sid
-        except Exception as e:
-            logger.debug(f"Failed to get current user SID: {e}")
-            return None
-
     def _read_hwinfo_key(self, root, path):
         sensors = []
         try:
@@ -333,26 +308,8 @@ class PerformanceMonitorService(win32serviceutil.ServiceFramework):
         """Get HWiNFO Gadget sensors"""
         hwinfo_reg_path = r"SOFTWARE\HWiNFO64\VSB"
 
-        # 1. HKEY_LOCAL_MACHINE (default & most common for services)
-        sensors = self._read_hwinfo_key(
-            winreg.HKEY_LOCAL_MACHINE,
-            hwinfo_reg_path
-        )
-        if sensors:
-            return sensors
-
-        # 2. Optional fallback: HKEY_USERS\<SID>
-        if self.hwinfo_allow_fallback:
-            sid = self.get_current_user_sid()
-            if sid:
-                sensors = self._read_hwinfo_key(
-                    winreg.HKEY_USERS,
-                    fr"{sid}\{hwinfo_reg_path}"
-                )
-                if sensors:
-                    return sensors
-
-        return []
+        # HKEY_LOCAL_MACHINE
+        return self._read_hwinfo_key(winreg.HKEY_LOCAL_MACHINE, hwinfo_reg_path) or []
 
     def get_performance_data(self):
         """Collect performance data"""

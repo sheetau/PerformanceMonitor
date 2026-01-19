@@ -73,14 +73,7 @@ Only the wallpapers that I am aware of are listed here.
        - Set `psutil` to `true` or `false`
        - Set `hwinfo` to `true` or `false`
      - This allows you to limit which backend is used to collect performance data.
-
-   - **HWiNFO registry fallback**
-     - Set `hwinfo_allow_user_hive_fallback` to `true` to enable a fallback mechanism for HWiNFO sensor data.
-     - When enabled, the service will resolve the current user’s SID and attempt to read sensor values from:  
-       `HKEY_CURRENT_USER\SOFTWARE\HWiNFO64\VSB`
-     - By default, data is read from  
-       `HKEY_LOCAL_MACHINE\SOFTWARE\HWiNFO64\VSB`
-     - This option is intended **only as a fallback** and should be considered **after** confirming that no data is available from the default registry path. You can also verify the data's presence by running `reg query` followed by the registry path in the Command Prompt.
+     - You can verify the presence of HWiNFO data by running `reg query HKEY_LOCAL_MACHINE\SOFTWARE\HWiNFO64\VSB` in the Command Prompt.
 
 4. Restart the service by right-clicking **Performance Monitor Service** in `services.msc` and selecting **Restart**.
 
@@ -104,9 +97,7 @@ Run the included `uninstaller.bat` as Administrator (This will stop and delete P
 
 > **Note on Security Warnings:**
 >
-> This executable is not code-signed, so some antivirus software may flag it as suspicious.
->
-> If the download is blocked, you can work around it by adding the intended download path to your antivirus exclusion list _(Windows Security → Virus & threat protection → Manage settings → Exclusions → Add an exclusion)_. If you see the warning, click “More info” and then “Run anyway” to proceed with the installation.
+> This executable is not code-signed, so some antivirus software may flag it as suspicious. If you see the warning, click “More info” and then “Run anyway” to proceed with the installation.
 >
 > Additionally, because this tool runs as a standard Windows service using legitimate Service APIs, it operates in Session 0. This architecture is necessary for proper system integration and automatic startup, but it can unfortunately cause some user-level diagnostic tools (like Process Explorer or PowerShell's Get-Process) to fail in retrieving standard process metadata (e.g., Path, Company). This behavior is an inherent side effect of the service architecture, not a result of intentional anti-analysis or obfuscation techniques.
 >

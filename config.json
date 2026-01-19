@@ -3,6 +3,5 @@
   "collect": {
     "psutil": true,
     "hwinfo": true
-  },
-  "hwinfo_allow_user_hive_fallback": false
+  }
 }
