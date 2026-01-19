@@ -15,12 +15,12 @@ VSVersionInfo(
       StringTable(
         '040904B0',
         [StringStruct('CompanyName', 'sheetau'),
-        StringStruct('FileDescription', 'Performance Monitor for Wallpaper Engine'),
+        StringStruct('FileDescription', 'Performance Monitor'),
         StringStruct('FileVersion', '1.1.1'),
         StringStruct('InternalName', 'PerformanceMonitor'),
         StringStruct('LegalCopyright', '© 2025 sheetau'),
         StringStruct('OriginalFilename', 'PerformanceMonitor.exe'),
-        StringStruct('ProductName', 'Performance Monitor for Wallpaper Engine'),
+        StringStruct('ProductName', 'Performance Monitor'),
         StringStruct('ProductVersion', '1.1.1')])
       ]), 
     VarFileInfo([VarStruct('Translation', [1033, 1200])])
