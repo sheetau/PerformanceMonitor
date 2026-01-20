@@ -49,9 +49,8 @@ Only the wallpapers that I am aware of are listed here.
   For more detailed and accurate hardware sensors (temperatures, voltages, fan speeds, etc.), HWiNFO can be used.
 
   To enable it:
-
   1. Install and launch **[HWiNFO](https://www.hwinfo.com/)**.
-  2. In **Settings**, enable all options starting with **“Minimize …”** and **Auto Start**.
+  2. In **Settings**, enable all options starting with **“Minimize …”** and **Auto Start** (setting the global polling period to 1000 ms is also recommended).
   3. Open **Sensor Settings → HWiNFO Gadget**.
   4. Enable **"Enable reporting to Gadget"**, and enable **“Report value in gadget”** for the sensors you want to use.
 
@@ -62,13 +61,10 @@ Only the wallpapers that I am aware of are listed here.
 1. Download [config.json](https://github.com/sheetau/PerformanceMonitor/blob/main/config.json).
 2. Place it in the same folder as `PerformanceMonitor.exe`.
 3. Open `config.json` and edit the following options as needed:
-
    - **Port**
-
      - Change the `port` value to use a different local server port.
 
    - **Data source control**
-
      - Inside the `collect` section, you can enable or disable data sources:
        - Set `psutil` to `true` or `false`
        - Set `hwinfo` to `true` or `false`
@@ -167,20 +163,21 @@ The data is returned in the following JSON format:
 
 The following keys are available by default under the `psutil` object:
 
-| Key                   | Description                             | Unit / Format |
-| --------------------- | --------------------------------------- | ------------- |
-| `cpu`                 | Overall CPU usage percentage            | %             |
-| `cpu_temp`            | CPU package temperature (if available)  | °C            |
-| `memory`              | RAM usage percentage                    | %             |
-| `memory_gb`           | RAM usage in GB                         | GB            |
-| `gpu_usage`           | GPU usage percentage                    | %             |
-| `vram_usage`          | GPU memory usage percentage             | %             |
-| `vram_gb`             | GPU memory usage in GB                  | GB            |
-| `gpu_temp`            | GPU temperature                         | °C            |
-| `upload_speed`        | Network upload speed                    | KB/s          |
-| `download_speed`      | Network download speed                  | KB/s          |
-| `c_disk`, `d_disk`, … | Disk usage in format "used GB/total GB" | GB            |
-| `timestamp`           | UNIX timestamp of measurement           | seconds       |
+| Key                   | Description                                  | Unit / Format |
+| --------------------- | -------------------------------------------- | ------------- |
+| `cpu`                 | Overall CPU usage percentage                 | %             |
+| `cpu_percore`         | CPU per core usage percentage (if available) | %             |
+| `cpu_temp`            | CPU package temperature (if available)       | °C            |
+| `memory`              | RAM usage percentage                         | %             |
+| `memory_gb`           | RAM usage in GB                              | GB            |
+| `gpu_usage`           | GPU usage percentage                         | %             |
+| `vram_usage`          | GPU memory usage percentage                  | %             |
+| `vram_gb`             | GPU memory usage in GB                       | GB            |
+| `gpu_temp`            | GPU temperature                              | °C            |
+| `upload_speed`        | Network upload speed                         | KB/s          |
+| `download_speed`      | Network download speed                       | KB/s          |
+| `c_disk`, `d_disk`, … | Disk usage in format "used GB/total GB"      | GB            |
+| `timestamp`           | UNIX timestamp of measurement                | seconds       |
 
 #### Handling HWiNFO Data
 
