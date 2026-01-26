@@ -719,6 +719,54 @@ def create_uninstall_bat():
     except Exception as e:
         print(f"\nFailed to create uninstall script: {e}")
 
+def create_update_bat():
+    """Create updater batch in the same folder as the exe"""
+    try:
+        exe_dir = os.path.dirname(sys.executable)
+        bat_path = os.path.join(exe_dir, "updater.bat")
+        bat_content = f"""@echo off
+        :: Check for admin rights
+        >nul 2>&1 "%SYSTEMROOT%\\system32\\cacls.exe" "%SYSTEMROOT%\\system32\\config\\system"
+        if '%errorlevel%' NEQ '0' (
+            echo This script requires Administrator privileges. Please run as Administrator.
+            pause
+            exit /b
+        )
+
+        set EXE_PATH={os.path.join(exe_dir, 'PerformanceMonitor.exe')}
+        set TMP_EXE=%EXE_PATH%.new
+
+        echo Downloading latest PerformanceMonitor.exe...
+
+        powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+        "Invoke-WebRequest -Uri 'https://github.com/sheetau/PerformanceMonitor/releases/latest/download/PerformanceMonitor.exe' -OutFile \"$env:TEMP\\PerformanceMonitor.exe\""
+
+        if not exist "%TEMP%\PerformanceMonitor.exe" (
+            echo Download failed.
+            pause
+            exit /b
+        )
+
+        echo Stopping Performance Monitor service...
+        sc stop PerformanceMonitor >nul 2>&1
+        timeout /t 2 /nobreak >nul
+
+        echo Replacing executable...
+        move /y "%TEMP%\PerformanceMonitor.exe" "%EXE_PATH%" >nul
+
+        echo Starting updated installer...
+        "%EXE_PATH%"
+
+        exit
+        """
+        with open(bat_path, "w", encoding="utf-8") as f:
+            f.write(bat_content)
+
+        print(f"\nUpdate script created: {bat_path}")
+    except Exception as e:
+        print(f"\nFailed to create update script: {e}")
+
+
 def main():
     """Main function"""
     LOG_DIR.mkdir(exist_ok=True)
@@ -743,8 +791,9 @@ def main():
                 time.sleep(3)
                 if start_service():
                     create_uninstall_bat()
+                    create_update_bat()
                     port = get_service_port()
-                    print("============================================================")
+                    print("\n============================================================")
                     print("Service started successfully.")
                     print(f" > Log file: {LOG_FILE}")
                     print(f" > Performance data: http://127.0.0.1:{port}/performance")

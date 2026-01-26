@@ -82,6 +82,12 @@ Only the wallpapers that I am aware of are listed here.
 2. Locate **Performance Monitor Service** in the list.
 3. Right-click the service and select **Stop**.
 
+#### Updating
+
+Run the included `updater.bat` as Administrator (This will update Performance Monitor to latest version without having to go to GitHub to download and run it).
+
+> Alternatively, you can download and run the latest version from [Latest Release](https://github.com/sheetau/PerformanceMonitor/releases/latest) as usual. The service will be overwritten automatically, so there is no need to stop or remove a service already running.
+
 #### Uninstalling
 
 Run the included `uninstaller.bat` as Administrator (This will stop and delete Performance Monitor service, Kill any remaining `PerformanceMonitor.exe` processes, and Delete `PerformanceMonitor.exe` itself).
