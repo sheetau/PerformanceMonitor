@@ -3,5 +3,6 @@
   "collect": {
     "psutil": true,
     "hwinfo": true
-  }
+  },
+  "user_sid": ""
 }

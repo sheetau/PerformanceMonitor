@@ -64,7 +64,7 @@ class PerformanceMonitorService(win32serviceutil.ServiceFramework):
         self.running = False
         self.performance_data = {}
         self.data_file = LOG_DIR / 'performance.json'
-        self.port, self.collect_config = self.load_config()
+        self.port, self.collect_config, self.user_sid = self.load_config()
         self.last_net_io = psutil.net_io_counters()
         self.last_net_time = time.time()
         self.psutil_was_enabled = False
@@ -86,6 +86,7 @@ class PerformanceMonitorService(win32serviceutil.ServiceFramework):
                 "psutil": True,
                 "hwinfo": True
             }
+            user_sid = None
 
             if config_file.exists():
                 with open(config_file, 'r', encoding='utf-8') as f:
@@ -97,9 +98,15 @@ class PerformanceMonitorService(win32serviceutil.ServiceFramework):
                 collect["psutil"] = collect_cfg.get("psutil", True)
                 collect["hwinfo"] = collect_cfg.get("hwinfo", True)
 
-                logger.warning(f"Config loaded: port={port}, collect={collect}")
+                user_sid = config.get("user_sid", None)
+                if user_sid:
+                    user_sid = user_sid.strip()
+                    if not user_sid:
+                        user_sid = None
 
-            return port, collect
+                logger.warning(f"Config loaded: port={port}, collect={collect}, user_sid={'set' if user_sid else 'not set'}")
+
+            return port, collect, user_sid
         except Exception as e:
             logger.warning(f"Error loading config: {e}")
             return 5000, {"psutil": True, "hwinfo": True}
@@ -308,8 +315,29 @@ class PerformanceMonitorService(win32serviceutil.ServiceFramework):
         """Get HWiNFO Gadget sensors"""
         hwinfo_reg_path = r"SOFTWARE\HWiNFO64\VSB"
 
-        # HKEY_LOCAL_MACHINE
-        return self._read_hwinfo_key(winreg.HKEY_LOCAL_MACHINE, hwinfo_reg_path) or []
+        # fallback: HKEY_USERS\<SID>
+        if self.user_sid:
+            logger.debug(f"Using user-specified SID: {self.user_sid}")
+            sensors = self._read_hwinfo_key(
+                winreg.HKEY_USERS,
+                fr"{self.user_sid}\{hwinfo_reg_path}"
+            )
+            if sensors:
+                logger.debug(f"HWiNFO sensors loaded from HKEY_USERS\{self.user_sid}")
+                return sensors
+            else:
+                logger.warning(f"No HWiNFO sensors found for SID: {self.user_sid}, falling back to HKEY_LOCAL_MACHINE")
+        
+        # default: HKEY_LOCAL_MACHINE
+        sensors = self._read_hwinfo_key(
+            winreg.HKEY_LOCAL_MACHINE,
+            hwinfo_reg_path
+        )
+        if sensors:
+            logger.debug("HWiNFO sensors loaded from HKEY_LOCAL_MACHINE")
+            return sensors
+
+        return []
 
     def get_performance_data(self):
         """Collect performance data"""

@@ -71,6 +71,9 @@ Only the wallpapers that I am aware of are listed here.
      - This allows you to limit which backend is used to collect performance data.
      - You can verify the presence of HWiNFO data by running `reg query HKEY_LOCAL_MACHINE\SOFTWARE\HWiNFO64\VSB` in the Command Prompt.
 
+   - **HWiNFO registry fallback**
+     - If the default command above returns no data, check for user-level data by running `reg query HKEY_CURRENT_USER\SOFTWARE\HWiNFO64\VSB`. If data is found there, run `whoami /user` in the Command Prompt to obtain your SID. By setting this SID to `user_sid` field in `config.json`, the service will correctly fallback to that specific registry path.
+
 4. Restart the service by right-clicking **Performance Monitor Service** in `services.msc` and selecting **Restart**.
 
 #### Stopping the Service
