@@ -23,8 +23,6 @@ a = Analysis(
         'ctypes',
         'traceback',
         'win32api',
-        'win32con',
-        'win32process',
         'win32file',
         'winreg'
     ],
