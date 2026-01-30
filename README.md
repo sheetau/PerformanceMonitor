@@ -30,9 +30,8 @@ Only the wallpapers that I am aware of are listed here.
 ### Installation & Usage
 
 1. Download the latest `PerformanceMonitor.exe` from [Latest Release](https://github.com/sheetau/PerformanceMonitor/releases/latest).
-   > It is recommended to create a folder and place it inside for organization.
 2. Run the executable **once with administrator privileges**.
-   - This will automatically uninstall any previous versions and register the new service to start at boot.
+   > This will automatically uninstall any previous versions and register the new service to start at boot.
 3. By default, performance data is accessible at: http://127.0.0.1:5000/performance
 
 #### Data Sources
