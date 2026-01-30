@@ -11,7 +11,6 @@ import time
 import threading
 import logging
 import traceback
-import subprocess
 from pathlib import Path
 import ctypes
 
@@ -30,6 +29,9 @@ try:
     GPU_AVAILABLE = True
 except ImportError:
     GPU_AVAILABLE = False
+
+# Define data directory in ProgramData
+PROGRAM_DATA_DIR = Path(os.environ.get("ProgramData", "C:\\ProgramData")) / "PerformanceMonitor"
 
 # Logging configuration
 LOG_DIR = Path(os.path.expandvars(r'%PROGRAMDATA%\PerformanceMonitor'))
@@ -74,12 +76,7 @@ class PerformanceMonitorService(win32serviceutil.ServiceFramework):
     def load_config(self):
         """Load configuration"""
         try:
-            if getattr(sys, 'frozen', False):
-                config_dir = Path(sys.executable).parent
-            else:
-                config_dir = Path(__file__).parent
-
-            config_file = config_dir / 'config.json'
+            config_file = PROGRAM_DATA_DIR / 'config.json'
 
             port = 5000
             collect = {
@@ -111,55 +108,6 @@ class PerformanceMonitorService(win32serviceutil.ServiceFramework):
             logger.warning(f"Error loading config: {e}")
             return 5000, {"psutil": True, "hwinfo": True}
 
-    def get_cpu_temperature(self):
-        """Get CPU temperature using multiple methods"""
-        try:
-            # Method 1: Try psutil sensors (works on some systems)
-            if hasattr(psutil, "sensors_temperatures"):
-                temps = psutil.sensors_temperatures()
-                if temps:
-                    # Try different sensor names
-                    for sensor_name in ['coretemp', 'k10temp', 'acpi', 'thermal']:
-                        if sensor_name in temps:
-                            for entry in temps[sensor_name]:
-                                if entry.current and entry.current > 0:
-                                    return round(entry.current, 1)
-            
-            # Method 2: Try WMI through subprocess (Windows specific)
-            try:
-                result = subprocess.run([
-                    'powershell', '-Command',
-                    'Get-WmiObject -Namespace "root/OpenHardwareMonitor" -Class Sensor | Where-Object {$_.SensorType -eq "Temperature" -and $_.Name -like "*CPU*"} | Select-Object -First 1 -ExpandProperty Value'
-                ], capture_output=True, text=True, timeout=5, creationflags=subprocess.CREATE_NO_WINDOW)
-                
-                if result.returncode == 0 and result.stdout.strip():
-                    temp = float(result.stdout.strip())
-                    if temp > 0:
-                        return round(temp, 1)
-            except:
-                pass
-            
-            # Method 3: Try alternative WMI query
-            try:
-                result = subprocess.run([
-                    'powershell', '-Command',
-                    'Get-WmiObject -Class MSAcpi_ThermalZoneTemperature -Namespace "root/wmi" | Select-Object -First 1 -ExpandProperty CurrentTemperature'
-                ], capture_output=True, text=True, timeout=5, creationflags=subprocess.CREATE_NO_WINDOW)
-                
-                if result.returncode == 0 and result.stdout.strip():
-                    # Convert from tenths of Kelvin to Celsius
-                    temp_kelvin = float(result.stdout.strip()) / 10
-                    temp_celsius = temp_kelvin - 273.15
-                    if temp_celsius > 0 and temp_celsius < 150:  # Sanity check
-                        return round(temp_celsius, 1)
-            except:
-                pass
-            
-        except Exception as e:
-            logger.debug(f"CPU temperature unavailable: {e}")
-        
-        return None
-
     def get_gpu_temperature(self):
         """Get GPU temperature"""
         try:
@@ -167,21 +115,6 @@ class PerformanceMonitorService(win32serviceutil.ServiceFramework):
                 gpus = GPUtil.getGPUs()
                 if gpus and gpus[0].temperature is not None:
                     return round(gpus[0].temperature, 1)
-            
-            # Alternative method using nvidia-ml-py or subprocess
-            try:
-                result = subprocess.run([
-                    'nvidia-smi', '--query-gpu=temperature.gpu', 
-                    '--format=csv,noheader,nounits'
-                ], capture_output=True, text=True, timeout=5, creationflags=subprocess.CREATE_NO_WINDOW)
-                
-                if result.returncode == 0 and result.stdout.strip():
-                    temp = float(result.stdout.strip())
-                    if temp > 0:
-                        return round(temp, 1)
-            except:
-                pass
-            
         except Exception as e:
             logger.debug(f"GPU temperature unavailable: {e}")
         
@@ -259,10 +192,12 @@ class PerformanceMonitorService(win32serviceutil.ServiceFramework):
             "timestamp": time.time(),
             "psutil": {
                 'cpu': 0,
+                'cpu_percore': [],
                 'memory': 0,
+                'memory_gb': None,
                 'gpu_usage': 0,
                 'vram_usage': 0,
-                'cpu_temp': None,
+                'vram_gb': None,
                 'gpu_temp': None,
                 'upload_speed': 0,
                 'download_speed': 0
@@ -363,8 +298,6 @@ class PerformanceMonitorService(win32serviceutil.ServiceFramework):
                     except Exception as e:
                         logger.debug(f"GPU data unavailable: {e}")
 
-                # --- CPU / GPU temperature ---
-                cpu_temp = self.get_cpu_temperature()
                 gpu_temp = self.get_gpu_temperature()
 
                 # --- Memory ---
@@ -409,9 +342,6 @@ class PerformanceMonitorService(win32serviceutil.ServiceFramework):
                         f"{vram_used_gb:.1f} GB/{vram_total_gb:.1f} GB"
                         if vram_used_gb is not None else None
                     ),
-
-                    # Temperature
-                    'cpu_temp': cpu_temp,
                     'gpu_temp': gpu_temp,
 
                     # Network
@@ -476,8 +406,6 @@ class PerformanceMonitorService(win32serviceutil.ServiceFramework):
                     log_parts.append(f"CPU={psutil_data.get('cpu')}%")
                     log_parts.append(f"Memory={psutil_data.get('memory')}%")
 
-                    if psutil_data.get("cpu_temp") is not None:
-                        log_parts.append(f"CPU Temp={psutil_data['cpu_temp']}°C")
                     if psutil_data.get("gpu_temp") is not None:
                         log_parts.append(f"GPU Temp={psutil_data['gpu_temp']}°C")
 
@@ -665,12 +593,7 @@ def start_service():
 
 def get_service_port():
     try:
-        if getattr(sys, 'frozen', False):
-            config_dir = Path(sys.executable).parent
-        else:
-            config_dir = Path(__file__).parent
-
-        config_file = config_dir / 'config.json'
+        config_file = PROGRAM_DATA_DIR / 'config.json'
         if config_file.exists():
             with open(config_file, 'r', encoding='utf-8') as f:
                 return json.load(f).get('port', 5000)
@@ -679,93 +602,6 @@ def get_service_port():
     except Exception as e:
         logger.warning(f"Error loading port config: {e}, using default port 5000")
         return 5000
-
-def create_uninstall_bat():
-    """Create uninstall batch in the same folder as the exe"""
-    try:
-        exe_dir = os.path.dirname(sys.executable)
-        bat_path = os.path.join(exe_dir, "uninstaller.bat")
-        bat_content = f"""@echo off
-        :: Check for admin rights
-        >nul 2>&1 "%SYSTEMROOT%\\system32\\cacls.exe" "%SYSTEMROOT%\\system32\\config\\system"
-        if '%errorlevel%' NEQ '0' (
-            echo This script requires Administrator privileges. Please run as Administrator.
-            pause
-            exit /b
-        )
-
-        echo Stopping Performance Monitor service...
-        sc stop PerformanceMonitor || echo Failed to stop service. It may not be running.
-
-        timeout /t 2 /nobreak >nul
-
-        echo Deleting Performance Monitor service...
-        sc delete PerformanceMonitor || echo Failed to delete service. It may have been already removed.
-
-        echo Killing any remaining PerformanceMonitor.exe processes...
-        taskkill /f /im PerformanceMonitor.exe || echo No running process found.
-
-        echo Deleting PerformanceMonitor.exe...
-        del "{os.path.join(exe_dir, 'PerformanceMonitor.exe')}" || echo Could not delete exe. It may not exist or be open.
-
-        echo Uninstallation completed.
-
-        echo You can safely delete this uninstaller.bat file if you want.
-        pause
-        """
-        with open(bat_path, "w", encoding="utf-8") as f:
-            f.write(bat_content)
-        print(f"\nUninstall script created: {bat_path}")
-    except Exception as e:
-        print(f"\nFailed to create uninstall script: {e}")
-
-def create_update_bat():
-    """Create updater batch in the same folder as the exe"""
-    try:
-        exe_dir = os.path.dirname(sys.executable)
-        bat_path = os.path.join(exe_dir, "updater.bat")
-        bat_content = f"""@echo off
-        :: Check for admin rights
-        >nul 2>&1 "%SYSTEMROOT%\\system32\\cacls.exe" "%SYSTEMROOT%\\system32\\config\\system"
-        if '%errorlevel%' NEQ '0' (
-            echo This script requires Administrator privileges. Please run as Administrator.
-            pause
-            exit /b
-        )
-
-        set EXE_PATH={os.path.join(exe_dir, 'PerformanceMonitor.exe')}
-        set TMP_EXE=%EXE_PATH%.new
-
-        echo Downloading latest PerformanceMonitor.exe...
-
-        powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-        "Invoke-WebRequest -Uri 'https://github.com/sheetau/PerformanceMonitor/releases/latest/download/PerformanceMonitor.exe' -OutFile \"$env:TEMP\\PerformanceMonitor.exe\""
-
-        if not exist "%TEMP%\PerformanceMonitor.exe" (
-            echo Download failed.
-            pause
-            exit /b
-        )
-
-        echo Stopping Performance Monitor service...
-        sc stop PerformanceMonitor >nul 2>&1
-        timeout /t 2 /nobreak >nul
-
-        echo Replacing executable...
-        move /y "%TEMP%\PerformanceMonitor.exe" "%EXE_PATH%" >nul
-
-        echo Starting updated installer...
-        "%EXE_PATH%"
-
-        exit
-        """
-        with open(bat_path, "w", encoding="utf-8") as f:
-            f.write(bat_content)
-
-        print(f"\nUpdate script created: {bat_path}")
-    except Exception as e:
-        print(f"\nFailed to create update script: {e}")
-
 
 def main():
     """Main function"""
@@ -790,8 +626,6 @@ def main():
                 print("Service installation completed.")
                 time.sleep(3)
                 if start_service():
-                    create_uninstall_bat()
-                    create_update_bat()
                     port = get_service_port()
                     print("\n============================================================")
                     print("Service started successfully.")
@@ -802,8 +636,10 @@ def main():
                     print("\nFor more detailed usage instructions, please refer to the README:")
                     print(" > https://github.com/sheetau/PerformanceMonitor/tree/main")
                     print("\nYou can change the port number and data sources by placing a config.json file")
-                    print("in the same directory as the executable:")
+                    print(f"in {PROGRAM_DATA_DIR}:")
                     print(" > https://github.com/sheetau/PerformanceMonitor/blob/main/config.json")
+                    print("\nTo uninstall, download the uninstaller from:")
+                    print(" > https://github.com/sheetau/PerformanceMonitor/releases/latest")
                         
                 else:
                     print(f"Failed to start the service. Check logs at {LOG_FILE}")

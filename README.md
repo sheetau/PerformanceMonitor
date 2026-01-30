@@ -6,15 +6,11 @@
 
 - Collects system performance data every second via **psutil / GPUtil** and/or **[HWiNFO](https://www.hwinfo.com/)**, and runs a local Flask server so the data can be accessed from Wallpaper Engine web wallpapers.
 - When using **psutil / GPUtil**, the following metrics are available:
-  - CPU usage and temperature
+  - CPU usage
   - GPU usage and temperature (NVIDIA GPUs only)
   - RAM and VRAM usage (VRAM metrics for NVIDIA GPUs only)
   - Disk usage
   - Network upload and download speeds
-
-> Note: Temperature readings obtained via **psutil** are only provided if your hardware supports it **and** your wallpaper is designed to utilize them.
-
-> If your CPU temperature via psutil is inaccurate or unavailable, running [OpenHardwareMonitor](https://openhardwaremonitor.org/downloads/) as a Windows service as described [here](https://github.com/openhardwaremonitor/openhardwaremonitor/issues/838#issuecomment-2370917648) may allow the program to access precise readings (save the code with `.ps1` extension in the same folder as `OpenHardwareMonitor.exe`, run it as admin, and start OpenHardwareMonitor service from `services.msc`). However, for the most reliable and detailed temperature data, using the **HWiNFO backend is strongly recommended**.
 
 - When **[HWiNFO](https://www.hwinfo.com/)** is available, all sensors with **“Report value in Gadget”** enabled are collected automatically, providing more accurate clocks, temperatures, and advanced hardware metrics.
 
@@ -59,7 +55,7 @@ Only the wallpapers that I am aware of are listed here.
 #### Changing the Port & Data Sources
 
 1. Download [config.json](https://github.com/sheetau/PerformanceMonitor/blob/main/config.json).
-2. Place it in the same folder as `PerformanceMonitor.exe`.
+2. Place it in `%ProgramData%\PerformanceMonitor`.
 3. Open `config.json` and edit the following options as needed:
    - **Port**
      - Change the `port` value to use a different local server port.
@@ -82,15 +78,9 @@ Only the wallpapers that I am aware of are listed here.
 2. Locate **Performance Monitor Service** in the list.
 3. Right-click the service and select **Stop**.
 
-#### Updating
-
-Run the included `updater.bat` as Administrator (This will update Performance Monitor to latest version without having to go to GitHub to download and run it).
-
-> Alternatively, you can download and run the latest version from [Latest Release](https://github.com/sheetau/PerformanceMonitor/releases/latest) as usual. The service will be overwritten automatically, so there is no need to stop or remove a service already running.
-
 #### Uninstalling
 
-Run the included `uninstaller.bat` as Administrator (This will stop and delete Performance Monitor service, Kill any remaining `PerformanceMonitor.exe` processes, and Delete `PerformanceMonitor.exe` itself).
+download the uninstaller from [Latest Release](https://github.com/sheetau/PerformanceMonitor/releases/latest), place it in the same folder as `PerformanceMonitor.exe`, and run it as Administrator (This will stop and delete Performance Monitor service, Kill any remaining `PerformanceMonitor.exe` processes, and Delete `PerformanceMonitor.exe` and `%ProgramData%\PerformanceMonitor`).
 
 ### Security & Privacy
 
@@ -176,7 +166,6 @@ The following keys are available by default under the `psutil` object:
 | --------------------- | -------------------------------------------- | ------------- |
 | `cpu`                 | Overall CPU usage percentage                 | %             |
 | `cpu_percore`         | CPU per core usage percentage (if available) | %             |
-| `cpu_temp`            | CPU package temperature (if available)       | °C            |
 | `memory`              | RAM usage percentage                         | %             |
 | `memory_gb`           | RAM usage in GB                              | GB            |
 | `gpu_usage`           | GPU usage percentage                         | %             |
